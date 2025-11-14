@@ -2,9 +2,12 @@
 #include "commandline.h"
 #include "errormsg.h"
 #include "ExtractTextures.h"
+#include "Model.h"
+#include "Rx3Model.h"
+#include <string>
 
-const char *RX3C_VERSION = "0.001";
-const unsigned int RX3C_VERSION_INT = 1;
+const char *RX3C_VERSION = "0.100";
+const unsigned int RX3C_VERSION_INT = 100;
 
 enum ErrorType {
     NONE = 0,
@@ -12,11 +15,18 @@ enum ErrorType {
     UNKNOWN_OPERATION_TYPE = 2,
     NO_INPUT_PATH = 3,
     INVALID_INPUT_PATH = 4,
-    ERROR_OTHER = 5
+    INVALID_OUTPUT_PATH = 5,
+    ERROR_OTHER = 6
+};
+
+enum OperationType {
+    OP_NONE = 0,
+    OP_EXPORT = 1,
+    OP_IMPORT = 2
 };
 
 int wmain(int argc, wchar_t *argv[]) {
-    CommandLine cmd(argc, argv, { L"i", L"o", L"game", L"skeleton" }, { L"recursive", L"createSubDir", L"silent", L"addRx3Name" });
+    CommandLine cmd(argc, argv, { L"i", L"o", L"game", L"skeleton", L"model", L"texture" }, { L"export", L"import", L"recursive", L"silent", L"console" });
     if (cmd.HasOption(L"silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -25,9 +35,16 @@ int wmain(int argc, wchar_t *argv[]) {
         else
             SetErrorDisplayType(ErrorDisplayType::ERR_CONSOLE);
     }
+    OperationType operation = OperationType::OP_NONE;
+    if (cmd.HasOption(L"export"))
+        operation = OperationType::OP_EXPORT;
+    else if (cmd.HasOption(L"import"))
+        operation = OperationType::OP_IMPORT;
+    if (operation == OperationType::OP_NONE)
+        return ErrorType::UNKNOWN_OPERATION_TYPE;
     path i;
-    options().hasInput = cmd.HasArgument(L"i");
-    if (!options().hasInput)
+    bool hasInput = cmd.HasArgument(L"i");
+    if (!hasInput)
         i = current_path();
     else {
         i = cmd.GetArgumentPath(L"i");
@@ -36,82 +53,72 @@ int wmain(int argc, wchar_t *argv[]) {
             return ErrorType::INVALID_INPUT_PATH;
         }
     }
+    bool isFolder = is_directory(i);
     path o;
     bool hasOutput = cmd.HasArgument(L"o");
-    if (hasOutput)
+    if (hasOutput) {
         o = cmd.GetArgumentPath(L"o");
-    options().createSubDir = cmd.HasOption(L"createSubDir");
-    options().addRx3Name = !options().hasInput || cmd.HasOption(L"addRx3Name");
+        if (!exists(o)) {
+            ErrorMessage("Output path does not exist");
+            return ErrorType::INVALID_OUTPUT_PATH;
+        }
+    }
+    else {
+        if (isFolder)
+            o = i;
+        else {
+            if (i.has_parent_path())
+                o = i.parent_path();
+            else
+                o = current_path();
+        }
+    }
+    Rx3Options rx3options;
+    if (cmd.HasArgument(L"game"))
+        rx3options.game = ToLower(WtoA(cmd.GetArgumentString(L"game")));
+    if (cmd.HasArgument(L"model"))
+        rx3options.modelFormat = ToLower(WtoA(cmd.GetArgumentString(L"model")));
+    if (cmd.HasArgument(L"texture"))
+        rx3options.textureFormat = ToLower(WtoA(cmd.GetArgumentString(L"texture")));
     if (cmd.HasArgument(L"skeleton"))
-        options().skeletonPath = cmd.GetArgumentPath(L"skeleton");
+        rx3options.skeletonPath = cmd.GetArgumentPath(L"skeleton");
 
     globalVars().device = new D3DDevice();
-    globalVars().fbxManager = CreateFbxManager();
 
-    auto processFile = [=](path const &in, bool inDir) {
-        try {
-            string ext = ToLower(in.extension().string());
-            if (!inDir || (is_regular_file(in) && (ext == ".rx3" || ext == ".fbx"))) {
-                string targetExt;
-                if (ext == ".rx3") {
-                    if (!options().hasInput)
-                        targetExt += "_unpacked";
-                    targetExt = ".fbx";
-                }
-                else if (ext == ".fbx") {
-                    if (!options().hasInput)
-                        targetExt += "_packed";
-                    targetExt = ".rx3";
-                }
-                path out;
-                if (hasOutput)
-                    out = o;
-                else
-                    out = in.parent_path();
-                if (!hasOutput || inDir) {
-                    string targetFileName = in.stem().string();
-                    string targetFileNameWithExt = targetFileName + targetExt;
-                    if (options().createSubDir)
-                        out = out / targetFileName / targetFileNameWithExt;
-                    else
-                        out = out / targetFileNameWithExt;
-                }
-                if (out.has_parent_path())
-                    create_directories(out.parent_path());
-                if (ext == ".rx3") {
-                    rx3export(in, out);
-                    path texturesOutPath;
-                    if (out.has_parent_path())
-                        texturesOutPath = out.parent_path();
-                    else
-                        texturesOutPath = current_path();
-                    ExtractTexturesFromRX3(in, texturesOutPath);
-                }
-            }
-        }
-        catch (exception &e) {
-            ErrorMessage(in.filename().string() + ": " + e.what());
-        }
+    auto ExportRX3 = [&](path const &in, path const &outFolder) {
+        if (!exists(outFolder))
+            create_directories(outFolder);
+        Model m = ModelFromRX3(in, rx3options);
+        if (!m.objects.empty() || !m.skeleton.bones.empty())
+            m.WriteFbx(outFolder / (in.stem().wstring() + L".fbx"), rx3options.modelFormat == "fbxascii");
+        ExtractTexturesFromRX3(in, outFolder / in.stem(), rx3options);
     };
 
-    if (is_directory(i)) {
-        options().processingFolders = true;
-        vector<path> filesToProcess;
-        if (cmd.HasOption(L"recursive")) {
-            for (auto const &p : recursive_directory_iterator(i))
-                filesToProcess.push_back(p.path());
+    if (operation == OperationType::OP_EXPORT) {
+        if (isFolder) {
+            vector<path> filesToProcess;
+            if (cmd.HasOption(L"recursive")) {
+                for (auto const &p : recursive_directory_iterator(i)) {
+                    if (!is_directory(p) && ToLower(p.path().extension().wstring()) == L".rx3")
+                        filesToProcess.push_back(p.path());
+                }
+            }
+            else {
+                for (auto const &p : directory_iterator(i)) {
+                    if (!is_directory(p) && ToLower(p.path().extension().wstring()) == L".rx3")
+                        filesToProcess.push_back(p.path());
+                }
+            }
+            for (auto const &p : filesToProcess) {
+                auto rel = relative(p, i).parent_path();
+                auto outSubFolder = o / rel;
+                ExportRX3(p, outSubFolder);
+            }
         }
         else {
-            for (auto const &p : directory_iterator(i))
-                filesToProcess.push_back(p.path());
+            ExportRX3(i, o);
         }
-        for (auto const &p : filesToProcess)
-            processFile(p, true);
     }
-    else
-        processFile(i, false);
-
-    DestroyFbxManager(globalVars().fbxManager);
     delete globalVars().device;
     return ErrorType::NONE;
 }

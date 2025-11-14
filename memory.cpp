@@ -1,6 +1,7 @@
 #include "memory.h"
 #include <string.h>
 
+namespace memory {
 unsigned int GetNumBytesToAlign(unsigned int offset, unsigned int alignment) {
     unsigned int m = offset % alignment;
     return (m > 0) ? (alignment - m) : 0;
@@ -20,4 +21,5 @@ void Memory_Zero(void *dst, size_t size) {
 
 void Memory_Copy(void *dst, void const *src, size_t size) {
     memcpy(dst, src, size);
+}
 }

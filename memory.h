@@ -1,5 +1,6 @@
 #pragma once
 
+namespace memory {
 template<typename T>
 T *At(void *object, unsigned int offset) {
     return (T *)((unsigned int)object + offset);
@@ -24,4 +25,5 @@ void Memory_Copy(void *dst, void const *src, size_t size);
 template<typename T>
 void Memory_Zero(T &obj) {
     Memory_Zero(&obj, sizeof(T));
+}
 }

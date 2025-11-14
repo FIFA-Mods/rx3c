@@ -12,12 +12,15 @@
     <ClInclude Include="ExtractTextures.h" />
     <ClInclude Include="D3DDevice.h" />
     <ClInclude Include="D3DInclude.h" />
+    <ClInclude Include="half.hpp" />
+    <ClInclude Include="Model.h" />
+    <ClInclude Include="Rx3Model.h" />
+    <ClInclude Include="Rx3Options.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="commandline.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Rx3Container.cpp" />
-    <ClCompile Include="rx3export.cpp" />
     <ClCompile Include="shared.cpp" />
     <ClCompile Include="ExtractNames.cpp" />
     <ClCompile Include="errormsg.cpp" />
@@ -25,6 +28,7 @@
     <ClCompile Include="rx3utils.cpp" />
     <ClCompile Include="ExtractTextures.cpp" />
     <ClCompile Include="D3DDevice.cpp" />
-    <ClCompile Include="rx3import.cpp" />
+    <ClCompile Include="Model.cpp" />
+    <ClCompile Include="Rx3Model.cpp" />
   </ItemGroup>
 </Project>

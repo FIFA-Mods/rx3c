@@ -30,23 +30,27 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>D:\Projects\Rx3Tools\bin\Debug\</OutDir>
+    <IntDir>$(SolutionDir).obj\$(Configuration)\</IntDir>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_HAS_STD_BYTE=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_HAS_STD_BYTE=0;_SILENCE_CXX23_DENORM_DEPRECATION_WARNING;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>D:\Projects\FBX SDK\include;D:\Projects\DXSDK\9.0c\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Program Files\Autodesk\FBX\FBX SDK\2019.5\include;D:\Projects\DXSDK\9.0c\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>D:\Projects\FBX SDK\lib\vs2019\x86\release;D:\Projects\DXSDK\9.0c\Lib\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Program Files\Autodesk\FBX\FBX SDK\2019.5\lib\vs2017\x86\release;D:\Projects\DXSDK\9.0c\Lib\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>libfbxsdk-mt.lib;libxml2-mt.lib;zlib-mt.lib;d3d9.lib;d3dx9.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </Link>
@@ -58,8 +62,12 @@
     <ClInclude Include="errormsg.h" />
     <ClInclude Include="ExtractNames.h" />
     <ClInclude Include="ExtractTextures.h" />
+    <ClInclude Include="half.hpp" />
     <ClInclude Include="memory.h" />
+    <ClInclude Include="Model.h" />
     <ClInclude Include="Rx3Container.h" />
+    <ClInclude Include="Rx3Model.h" />
+    <ClInclude Include="Rx3Options.h" />
     <ClInclude Include="rx3utils.h" />
     <ClInclude Include="shared.h" />
     <ClInclude Include="winheader.h" />
@@ -72,9 +80,9 @@
     <ClCompile Include="ExtractTextures.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="memory.cpp" />
+    <ClCompile Include="Model.cpp" />
     <ClCompile Include="Rx3Container.cpp" />
-    <ClCompile Include="rx3export.cpp" />
-    <ClCompile Include="rx3import.cpp" />
+    <ClCompile Include="Rx3Model.cpp" />
     <ClCompile Include="rx3utils.cpp" />
     <ClCompile Include="shared.cpp" />
   </ItemGroup>

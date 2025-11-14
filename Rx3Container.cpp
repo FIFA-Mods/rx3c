@@ -1,20 +1,42 @@
 #include "Rx3Container.h"
-#include "errormsg.h"
-#include "memory.h"
 
-void Rx3SwapEndian(unsigned int &value) {
+template<typename T>
+T *At(void *object, size_t offset) {
+    return (T *)((size_t)object + offset);
+}
+
+template<typename T>
+T GetAt(void *object, size_t offset) {
+    return *At<T>(object, offset);
+}
+
+template<typename T>
+void SetAt(void *object, size_t offset, T const &value) {
+    *At<T>(object, offset) = value;
+}
+
+size_t GetNumBytesToAlign(size_t offset, size_t alignment) {
+    size_t m = offset % alignment;
+    return (m > 0) ? (alignment - m) : 0;
+}
+
+size_t GetAligned(size_t offset, size_t alignment) {
+    return offset + GetNumBytesToAlign(offset, alignment);
+}
+
+void Rx3SwapEndian(uint32_t &value) {
     value = _byteswap_ulong(value);
 }
 
-void Rx3SwapEndian(unsigned short &value) {
+void Rx3SwapEndian(uint16_t &value) {
     value = _byteswap_ushort(value);
 }
 
-void Rx3SwapEndian(int &value) {
+void Rx3SwapEndian(int32_t &value) {
     value = _byteswap_ulong(value);
 }
 
-void Rx3SwapEndian(short &value) {
+void Rx3SwapEndian(int16_t &value) {
     value = _byteswap_ushort(value);
 }
 
@@ -23,59 +45,59 @@ void Rx3SwapEndian(float &value) {
 }
 
 Rx3Reader::Rx3Reader(void const *data, bool bigEndian) {
-    begin = (unsigned char const *)data;
-    current = begin;
-    _bigEndian = bigEndian;
+    mBegin = (uint8_t const *)data;
+    mCurrent = mBegin;
+    mBigEndian = bigEndian;
 }
 
-Rx3Reader::Rx3Reader(Rx3Section *rx3section) : Rx3Reader(rx3section->data.data(), rx3section->bigEndian) {}
-Rx3Reader::Rx3Reader(Rx3Section const *rx3section) : Rx3Reader(rx3section->data.data(), rx3section->bigEndian) {}
-Rx3Reader::Rx3Reader(Rx3Section &rx3section) : Rx3Reader(rx3section.data.data(), rx3section.bigEndian) {}
-Rx3Reader::Rx3Reader(Rx3Section const &rx3section) : Rx3Reader(rx3section.data.data(), rx3section.bigEndian) {}
+Rx3Reader::Rx3Reader(Rx3Chunk *rx3chunk) : Rx3Reader(rx3chunk->mData.data(), rx3chunk->mBigEndian) {}
+Rx3Reader::Rx3Reader(Rx3Chunk const *rx3chunk) : Rx3Reader(rx3chunk->mData.data(), rx3chunk->mBigEndian) {}
+Rx3Reader::Rx3Reader(Rx3Chunk &rx3chunk) : Rx3Reader(rx3chunk.mData.data(), rx3chunk.mBigEndian) {}
+Rx3Reader::Rx3Reader(Rx3Chunk const &rx3chunk) : Rx3Reader(rx3chunk.mData.data(), rx3chunk.mBigEndian) {}
 
 size_t Rx3Reader::Position() const {
-    return current - begin;
+    return mCurrent - mBegin;
 }
 
 void Rx3Reader::MoveTo(size_t position) {
-    current = begin + position;
+    mCurrent = mBegin + position;
 }
 
 void Rx3Reader::Skip(size_t bytes) {
-    current += bytes;
+    mCurrent += bytes;
 }
 
 char const *Rx3Reader::GetString() {
-    return (char const *)current;
+    return (char const *)mCurrent;
 }
 
 char const *Rx3Reader::ReadString() {
     char const *result = GetString();
-    current += strlen(result) + 1;
+    mCurrent += strlen(result) + 1;
     return result;
 }
 
 void const *Rx3Reader::GetCurrentPtr() {
-    return current;
+    return mCurrent;
 }
 
 void Rx3Reader::SetBigEndian(bool set) {
-    _bigEndian = set;
+    mBigEndian = set;
 }
 
-void Rx3Writer::PutData(void const *data, unsigned int size) {
+void Rx3Writer::PutData(void const *data, size_t size) {
     if (size > 0) {
-        unsigned int current = mData.size();
+        size_t current = mData.size();
         mData.resize(current + size);
-        Memory_Copy(&mData[current], data, size);
+        memcpy(&mData[current], data, size);
     }
 }
 
-Rx3Writer::Rx3Writer(vector<unsigned char> &data, bool bigEndian) : mData(data), _bigEndian(bigEndian) {}
-Rx3Writer::Rx3Writer(Rx3Section *rx3section) : mData(rx3section->data), _bigEndian(rx3section->bigEndian) {}
-Rx3Writer::Rx3Writer(Rx3Section const *rx3section) : mData(const_cast<vector<unsigned char> &>(rx3section->data)), _bigEndian(rx3section->bigEndian) {}
-Rx3Writer::Rx3Writer(Rx3Section &rx3section) : mData(rx3section.data), _bigEndian(rx3section.bigEndian) {}
-Rx3Writer::Rx3Writer(Rx3Section const &rx3section) : mData(const_cast<vector<unsigned char> &>(rx3section.data)), _bigEndian(rx3section.bigEndian) {}
+Rx3Writer::Rx3Writer(vector<uint8_t> &data, bool bigEndian) : mData(data), mBigEndian(bigEndian) {}
+Rx3Writer::Rx3Writer(Rx3Chunk *rx3chunk) : mData(rx3chunk->mData), mBigEndian(rx3chunk->mBigEndian) {}
+Rx3Writer::Rx3Writer(Rx3Chunk const *rx3chunk) : mData(const_cast<vector<uint8_t> &>(rx3chunk->mData)), mBigEndian(rx3chunk->mBigEndian) {}
+Rx3Writer::Rx3Writer(Rx3Chunk &rx3chunk) : mData(rx3chunk.mData), mBigEndian(rx3chunk.mBigEndian) {}
+Rx3Writer::Rx3Writer(Rx3Chunk const &rx3chunk) : mData(const_cast<vector<uint8_t> &>(rx3chunk.mData)), mBigEndian(rx3chunk.mBigEndian) {}
 
 void Rx3Writer::Put(char const *str) {
     PutData(str, strlen(str));
@@ -97,21 +119,21 @@ void Rx3Writer::Put(std::wstring const &str) {
     Put<wchar_t>(L'\0');
 }
 
-void Rx3Writer::Put(void const *data, unsigned int size) {
+void Rx3Writer::Put(void const *data, size_t size) {
     PutData(data, size);
 }
 
-void Rx3Writer::Align(unsigned int alignment) {
+void Rx3Writer::Align(size_t alignment) {
     auto numBytes = GetNumBytesToAlign(mData.size(), alignment);
-    for (unsigned int i = 0; i < numBytes; i++)
-        Put<unsigned char>(0);
+    for (size_t i = 0; i < numBytes; i++)
+        Put<uint8_t>(0);
 }
 
 void Rx3Writer::SetBigEndian(bool set) {
-    _bigEndian = set;
+    mBigEndian = set;
 }
 
-void Rx3Writer::Reserve(unsigned int size) {
+void Rx3Writer::Reserve(size_t size) {
     if (size > mData.capacity())
         mData.reserve(size);
 }
@@ -125,35 +147,35 @@ bool Rx3Container::Load(path const &rx3path) {
     FILE *file = nullptr;
     _wfopen_s(&file, rx3path.c_str(), L"rb");
     if (file) {
-        name = rx3path.stem().string();
+        mName = rx3path.stem().string();
         fseek(file, 0, SEEK_END);
         auto fileSize = ftell(file);
         fseek(file, 0, SEEK_SET);
         if (fileSize >= 16) {
-            unsigned char *fileData = new unsigned char[fileSize];
+            uint8_t *fileData = new uint8_t[fileSize];
             fread(fileData, 1, fileSize, file);
             Rx3Reader reader(fileData);
             int fileType = 0;
-            unsigned int signature = reader.Read<unsigned int>();
-            if (signature == 'l3XR')
+            uint32_t magic = reader.Read<uint32_t>();
+            if (magic == 'l3XR')
                 fileType = 1;
-            else if (signature == 'b3XR')
+            else if (magic == 'b3XR')
                 fileType = 2;
             if (fileType == 1 || fileType == 2) {
                 reader.SetBigEndian(fileType == 2);
                 reader.Skip(8);
-                unsigned int numSections = reader.Read<unsigned int>();
-                if (numSections > 0) {
-                    sections.resize(numSections);
-                    for (unsigned int s = 0; s < numSections; s++) {
-                        unsigned int id = reader.Read<unsigned int>();
-                        unsigned int offset = reader.Read<unsigned int>();
-                        unsigned int size = reader.Read<unsigned int>();
+                uint32_t numChunks = reader.Read<uint32_t>();
+                if (numChunks > 0) {
+                    mChunks.resize(numChunks);
+                    for (uint32_t s = 0; s < numChunks; s++) {
+                        uint32_t id = reader.Read<uint32_t>();
+                        uint32_t offset = reader.Read<uint32_t>();
+                        uint32_t size = reader.Read<uint32_t>();
                         reader.Skip(4);
-                        sections[s].id = id;
+                        mChunks[s].mId = id;
                         if (size > 0) {
-                            sections[s].data.resize(size);
-                            memcpy(sections[s].data.data(), &fileData[offset], size);
+                            mChunks[s].mData.resize(size);
+                            memcpy(mChunks[s].mData.data(), &fileData[offset], size);
                         }
                     }
                 }
@@ -168,31 +190,31 @@ bool Rx3Container::Load(path const &rx3path) {
 
 bool Rx3Container::Save(path const &rx3path) {
     bool result = false;
-    vector<unsigned char> data;
+    vector<uint8_t> data;
     Rx3Writer writer(data);
-    if (bigEndian)
-        writer.Put<unsigned int>('b3XR');
+    if (mBigEndian)
+        writer.Put<uint32_t>('b3XR');
     else
-        writer.Put<unsigned int>('l3XR');
-    writer.SetBigEndian(bigEndian);
-    writer.Put<unsigned int>(4);
-    unsigned int fileHeaderSize = 16 + 16 * sections.size();
-    unsigned int totalSize = fileHeaderSize;
-    for (auto const &section : sections)
-        totalSize += section.data.size();
-    writer.Put<unsigned int>(totalSize);
-    unsigned int numSections = sections.size();
-    writer.Put<unsigned int>(numSections);
-    unsigned int currentOffset = fileHeaderSize;
-    for (auto const &section : sections) {
-        writer.Put<unsigned int>(section.id);
-        writer.Put<unsigned int>(currentOffset);
-        writer.Put<unsigned int>(section.data.size());
-        writer.Put<unsigned int>(0);
-        currentOffset += section.data.size();
+        writer.Put<uint32_t>('l3XR');
+    writer.SetBigEndian(mBigEndian);
+    writer.Put<uint32_t>(4);
+    uint32_t fileHeaderSize = 16 + 16 * mChunks.size();
+    uint32_t totalSize = fileHeaderSize;
+    for (auto const &chunk : mChunks)
+        totalSize += chunk.mData.size();
+    writer.Put<uint32_t>(totalSize);
+    uint32_t numChunks = mChunks.size();
+    writer.Put<uint32_t>(numChunks);
+    uint32_t currentOffset = fileHeaderSize;
+    for (auto const &chunk : mChunks) {
+        writer.Put<uint32_t>(chunk.mId);
+        writer.Put<uint32_t>(currentOffset);
+        writer.Put<uint32_t>(chunk.mData.size());
+        writer.Put<uint32_t>(0);
+        currentOffset += chunk.mData.size();
     }
-    for (auto const &section : sections)
-        writer.Put(section.data.data(), section.data.size());
+    for (auto const &chunk : mChunks)
+        writer.Put(chunk.mData.data(), chunk.mData.size());
     FILE *file = nullptr;
     _wfopen_s(&file, rx3path.c_str(), L"wb");
     if (file) {
@@ -207,30 +229,30 @@ Rx3Container::Rx3Container() {
 
 }
 
-Rx3Section *Rx3Container::FindFirstSection(unsigned int sectionId) {
-    for (auto &s : sections) {
-        if (s.id == sectionId)
+Rx3Chunk *Rx3Container::FindFirstChunk(uint32_t chunkId) {
+    for (auto &s : mChunks) {
+        if (s.mId == chunkId)
             return &s;
     }
     return nullptr;
 }
 
-vector<Rx3Section *> Rx3Container::FindAllSections(unsigned int sectionId) {
-    vector<Rx3Section *> result;
-    for (auto &s : sections) {
-        if (s.id == sectionId)
+vector<Rx3Chunk *> Rx3Container::FindAllChunks(uint32_t chunkId) {
+    vector<Rx3Chunk *> result;
+    for (auto &s : mChunks) {
+        if (s.mId == chunkId)
             result.push_back(&s);
     }
     return result;
 }
 
-Rx3Section &Rx3Container::AddSection(unsigned int sectionId) {
-    Rx3Section section;
-    section.id = sectionId;
-    section.bigEndian = bigEndian;
-    return sections.emplace_back(section);
+Rx3Chunk &Rx3Container::AddChunk(uint32_t chunkId) {
+    Rx3Chunk chunk;
+    chunk.mId = chunkId;
+    chunk.mBigEndian = mBigEndian;
+    return mChunks.emplace_back(chunk);
 }
 
 bool Rx3Container::IsEmpty() {
-    return sections.empty();
+    return mChunks.empty();
 }
