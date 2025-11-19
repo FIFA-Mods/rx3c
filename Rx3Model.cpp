@@ -340,6 +340,17 @@ std::vector<std::string> Split(std::string const &line, char delim, bool trim = 
     AddStr();
     return result;
 }
+
+bool EndsWithNumber(const std::string &s, int &outNumber) {
+    size_t pos = s.rfind('_');
+    if (pos == std::string::npos) return false;
+    if (pos == s.size() - 1) return false;
+    std::string numPart = s.substr(pos + 1);
+    if (!std::all_of(numPart.begin(), numPart.end(), ::isdigit))
+        return false;
+    outNumber = std::stoi(numPart);
+    return true;
+}
 }
 
 void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk *ibChunk, int primType, Rx3Options const &options) {
@@ -515,7 +526,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
     }
 }
 
-Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options) {
+Model ModelFromSimpleMeshContainer(Rx3Container &rx3, path const &rx3path, Rx3Options const &options) {
     using namespace helper::rx3model;
     Model model;
     auto indexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_INDEX_BUFFER);
@@ -615,7 +626,7 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options)
     return model;
 }
 
-Model ModelFromSceneContainer(Rx3Container &rx3, Rx3Options const &options) {
+Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options const &options) {
     using namespace helper::rx3model;
     Model model;
     auto indexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_INDEX_BUFFER);
@@ -627,6 +638,19 @@ Model ModelFromSceneContainer(Rx3Container &rx3, Rx3Options const &options) {
     auto sceneLayerChunks = rx3.FindAllChunks(RX3_CHUNK_SCENE_LAYER);
     auto materialSections = rx3.FindAllChunks(RX3_CHUNK_MATERIAL);
     auto locationChunks = rx3.FindAllChunks(RX3_CHUNK_LOCATION);
+    path crowdPath;
+    if (rx3path.has_parent_path()) {
+        auto parentDir = rx3path.parent_path();
+        string filename = rx3path.stem().string();
+        int stadiumId = -1;
+        if (EndsWithNumber(filename, stadiumId) && stadiumId != -1) {
+            string crowdFilename = "crowd_" + to_string(stadiumId) + "_1.dat";
+            if (exists(parentDir / crowdFilename))
+                crowdPath = parentDir / crowdFilename;
+            else if (parentDir.has_parent_path() && exists(parentDir.parent_path() / "crowdplacement" / crowdFilename))
+                crowdPath = parentDir.parent_path() / "crowdplacement" / crowdFilename;
+        }
+    }
     if (!sceneLayerChunks.empty()) {
         vector<string> meshNames, locationNames, nodeNames, collisionNames, texNames;
         auto nameTableChunk = rx3.FindFirstChunk(RX3_CHUNK_NAME_TABLE);
@@ -737,7 +761,6 @@ Model ModelFromSceneContainer(Rx3Container &rx3, Rx3Options const &options) {
                 }
             }
         }
-        
         if (!locationChunks.empty()) {
             auto &locationsRootObj = model.objects.emplace_back();
             locationsRootObj.name = "Locations";
@@ -747,13 +770,160 @@ Model ModelFromSceneContainer(Rx3Container &rx3, Rx3Options const &options) {
                 auto pos = locationReader.Read<Vector3>();
                 auto rot = locationReader.Read<Vector3>();
                 auto &locationObj = model.objects.emplace_back();
-                locationObj.name = i < locationNames.size() ? locationNames[i] : "location_" + to_string(i);
+                locationObj.name = i < locationNames.size() ? locationNames[i] : "location_" + to_string(i + 1);
                 locationObj.parent = "Locations";
                 locationObj.transform.SetIdentity();
                 const double radToDeg = 180.0 / M_PI;
                 FbxVector4 rotDegrees = FbxVector4((double)rot.x * radToDeg, (double)rot.y * radToDeg, (double)rot.z * radToDeg);
                 locationObj.transform.SetR(rotDegrees);
                 locationObj.transform.SetT(pos.ToFbx());
+            }
+        }
+        if (!crowdPath.empty()) {
+            FILE *crowdFile = nullptr;
+#pragma pack (push, 1)
+            struct CrowdHeader {
+                uint32_t magic;
+                uint16_t version;
+                uint32_t numseats;
+            };
+
+            struct SeatBlob_0x0103 {
+                float x, y, z;
+                float rotation;
+                uint8_t seatcolor[3];
+                uint8_t section;
+                uint8_t tier;
+                uint8_t attendance;
+                uint8_t influencearea;
+                uint8_t unused3;
+                float shade[4];
+                uint8_t unused_animgroups;
+                uint8_t unused_numaccs;
+            };
+
+            struct SeatBlob_0x0104 {
+                float x, y, z;
+                float rotation;
+                uint8_t seatcolor[3];
+                uint8_t section0;
+                uint8_t section1;
+                uint8_t unknown1;
+                uint8_t unknown2;
+                uint8_t tier;
+                uint8_t attendance;
+                float shade[4];
+            };
+
+            struct SeatBlob_0x0105 {
+                float x, y, z;
+                float rotation;
+                uint8_t seatcolor[3];
+                uint8_t section0;
+                uint8_t section1;
+                uint8_t tier;
+                uint8_t attendance;
+                uint8_t nochair;
+                uint8_t cardcolors[3];
+                uint8_t crowdpattern;
+                uint8_t pad[4];
+            };
+#pragma pack (pop)
+            _wfopen_s(&crowdFile, crowdPath.c_str(), L"rb");
+            if (crowdFile) {
+                CrowdHeader header {};
+                fread(&header, sizeof(CrowdHeader), 1, crowdFile);
+                if (header.magic == 'DWRC') {
+                    auto &crowdObj = model.objects.emplace_back();
+                    crowdObj.name = "Crowd";
+                    std::map<uint8_t, Object> tiers;
+                    for (uint32_t i = 0; i < header.numseats; i++) {
+                        Vector3 pos;
+                        float angle = 0.0f;
+                        RGBA seatcolor(0, 0, 0, 0), shade(0, 0, 0, 0), cardcolors(0, 0, 0, 0);
+                        uint8_t tier = 0, section0 = 0, section1 = 0, attendance = 0, nochair = 0, crowdpattern = 0;
+                        if (header.version == 0x103) {
+                            SeatBlob_0x0103 seat;
+                            fread(&seat, sizeof(SeatBlob_0x0103), 1, crowdFile);
+                            pos.Set(seat.x, seat.y, seat.z);
+                            angle = seat.rotation;
+                            seatcolor.Set(seat.seatcolor[0], seat.seatcolor[1], seat.seatcolor[2], 255);
+                            shade.Set(seat.shade[0], seat.shade[1], seat.shade[2], seat.shade[3]);
+                            section0 = seat.section;
+                            tier = seat.tier;
+                            attendance = seat.attendance;
+                        }
+                        else if (header.version == 0x104) {
+                            SeatBlob_0x0104 seat;
+                            fread(&seat, sizeof(SeatBlob_0x0104), 1, crowdFile);
+                            pos.Set(seat.x, seat.y, seat.z);
+                            angle = seat.rotation;
+                            seatcolor.Set(seat.seatcolor[0], seat.seatcolor[1], seat.seatcolor[2], 255);
+                            shade.Set(seat.shade[0], seat.shade[1], seat.shade[2], seat.shade[3]);
+                            section0 = seat.section0;
+                            section1 = seat.section1;
+                            tier = seat.tier;
+                            attendance = seat.attendance;
+                        }
+                        else if (header.version == 0x105) {
+                            SeatBlob_0x0105 seat;
+                            fread(&seat, sizeof(SeatBlob_0x0105), 1, crowdFile);
+                            pos.Set(seat.x, seat.y, seat.z);
+                            angle = seat.rotation;
+                            seatcolor.Set(seat.seatcolor[0], seat.seatcolor[1], seat.seatcolor[2], 255);
+                            section0 = seat.section0;
+                            section1 = seat.section1;
+                            tier = seat.tier;
+                            attendance = seat.attendance;
+                            nochair= seat.nochair;
+                            cardcolors = RGBA(seat.cardcolors[0], seat.cardcolors[1], seat.cardcolors[2], 255);
+                            crowdpattern = seat.crowdpattern;
+                        }
+                        else
+                            continue;
+                        Object &obj = tiers[tier];
+                        size_t vertIndex = obj.mesh.vertices.size();
+                        size_t triIndex = obj.mesh.triangles.size();
+                        obj.mesh.vertices.resize(vertIndex + 4);
+                        obj.mesh.triangles.resize(triIndex + 4);
+                        const float SeatScale = 30.0f;
+                        FbxVector4 rect[4] = {
+                        { -SeatScale, 0, 0, 1 },
+                        { -SeatScale, SeatScale * 2, 0, 1 },
+                        {  SeatScale, SeatScale * 2, 0, 1 },
+                        {  SeatScale, 0, 0, 1 }
+                        };
+                        FbxAMatrix mat;
+                        mat.SetIdentity();
+                        mat.SetR(FbxVector4(0.0, angle + 90.0, 0.0, 0.0));
+                        mat.SetT(pos.ToFbx());
+                        for (size_t v = 0; v < 4; v++) {
+                            FbxVector4 globalPos = mat.MultT(rect[v]);
+                            obj.mesh.vertices[vertIndex + v].pos = FbxDouble3(globalPos[0], globalPos[1], globalPos[2]);
+                            obj.mesh.vertices[vertIndex + v].colors[0] = seatcolor;
+                            obj.mesh.vertices[vertIndex + v].colors[1] = shade;
+                            obj.mesh.vertices[vertIndex + v].colors[2] = RGBA(section0, section0, section0, 255);
+                            obj.mesh.vertices[vertIndex + v].colors[3] = RGBA(section1, section1, section1, 255);
+                            obj.mesh.vertices[vertIndex + v].colors[4] = RGBA(attendance, attendance, attendance, 255);
+                            obj.mesh.vertices[vertIndex + v].colors[5] = RGBA(nochair, nochair, nochair, 255);
+                            obj.mesh.vertices[vertIndex + v].colors[6] = cardcolors;
+                            obj.mesh.vertices[vertIndex + v].colors[7] = RGBA(crowdpattern, crowdpattern, crowdpattern, 255);
+                        }
+                        obj.mesh.triangles[triIndex] = { vertIndex + 2, vertIndex + 1, vertIndex + 0 };
+                        obj.mesh.triangles[triIndex + 1] = { vertIndex + 0, vertIndex + 3, vertIndex + 2 };
+                    }
+                    std::string layerNames[] = { "SeatColor", "Shade", "NeutralHomeAway", "UltraHomeAway", "Attendance", "NoChair",
+                        "CardColors", "CrowdPattern"};
+                    for (auto &[tier, obj] : tiers) {
+                        obj.name = "tier_" + std::to_string(tier);
+                        obj.parent = "Crowd";
+                        obj.mesh.vertexFormat = V_8Colors;
+                        for (size_t l = 0; l < std::size(layerNames); l++)
+                            obj.mesh.colorLayerNames[l] = layerNames[l];
+                        model.objects.push_back(obj);
+                    }
+                }
+                fclose(crowdFile);
             }
         }
     }
@@ -763,8 +933,8 @@ Model ModelFromSceneContainer(Rx3Container &rx3, Rx3Options const &options) {
 Model ModelFromRX3(path const &rx3path, Rx3Options const &options) {
     Rx3Container rx3(rx3path);
     if (rx3.FindFirstChunk(RX3_CHUNK_SCENE_INSTANCE))
-        return ModelFromSceneContainer(rx3, options);
+        return ModelFromSceneContainer(rx3, rx3path, options);
     else if (rx3.FindFirstChunk(RX3_CHUNK_SIMPLE_MESH))
-        return ModelFromSimpleMeshContainer(rx3, options);
+        return ModelFromSimpleMeshContainer(rx3, rx3path, options);
     return Model();
 }

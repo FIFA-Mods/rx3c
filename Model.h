@@ -153,6 +153,10 @@ struct RGBA {
     inline RGBA() { r = g = b = a = 255; }
     inline RGBA(unsigned char R, unsigned char G, unsigned char B, unsigned char A) { r = R; g = G; b = B; a = A; }
     inline void Set(unsigned char R, unsigned char G, unsigned char B, unsigned char A) { r = R; g = G; b = B; a = A; }
+    inline void Set(float R, float G, float B, float A) {
+        r = (unsigned char)(R * 255.0f); g = (unsigned char)(G * 255.0f);
+        b = (unsigned char)(B * 255.0f); a = (unsigned char)(A * 255.0f);
+    }
     inline RGBA const&operator+=(RGBA const &o) { r += o.r; g += o.g; b += o.b; a += o.a; return *this; }
     inline RGBA const&operator-=(RGBA const &o) { r -= o.r; g -= o.g; b -= o.b; a -= o.a; return *this; }
     inline RGBA const &operator*=(RGBA const &o) { r *= o.r; g *= o.g; b *= o.b; a *= o.a; return *this; }
@@ -258,6 +262,8 @@ struct MeshData {
     std::vector<Vertex> vertices;
     std::vector<std::array<uint32_t, 3>> triangles;
     std::string material;
+    std::array<std::string, 8> uvLayerNames;
+    std::array<std::string, 8> colorLayerNames;
 
     MeshData() {
         vertexFormat = 0;
@@ -496,7 +502,7 @@ struct Model {
                 }
                 std::vector<FbxLayerElementUV *> uvLayers;
                 for (unsigned char uvSet = 0; uvSet < NumTexCoords(mesh.vertexFormat); ++uvSet) {
-                    std::string uvName = "UV" + std::to_string(uvSet);
+                    std::string uvName = (!mesh.uvLayerNames[uvSet].empty()) ? mesh.uvLayerNames[uvSet] : "UV" + std::to_string(uvSet);
                     FbxLayerElementUV *leUV = fbxMesh->CreateElementUV(uvName.c_str());
                     leUV->SetMappingMode(FbxLayerElement::eByPolygonVertex);
                     leUV->SetReferenceMode(FbxLayerElement::eDirect);
@@ -505,6 +511,8 @@ struct Model {
                 std::vector<FbxLayerElementVertexColor *> colorLayers;
                 for (unsigned char c = 0; c < NumColors(mesh.vertexFormat); ++c) {
                     FbxLayerElementVertexColor *leVC = fbxMesh->CreateElementVertexColor();
+                    if (!mesh.colorLayerNames[c].empty())
+                        leVC->SetName(mesh.colorLayerNames[c].c_str());
                     leVC->SetMappingMode(FbxGeometryElement::eByPolygonVertex);
                     leVC->SetReferenceMode(FbxGeometryElement::eDirect);
                     colorLayers.push_back(leVC);
