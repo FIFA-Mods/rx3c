@@ -4,3 +4,4 @@
 #include <filesystem>
 
 Model ModelFromRX3(std::filesystem::path const &rx3path, Rx3Options const &options);
+void ModelToRX3SimpleMesh(Model const &model, std::filesystem::path const &rx3path, Rx3Options const &options);

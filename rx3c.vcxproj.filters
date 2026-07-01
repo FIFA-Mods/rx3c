@@ -13,7 +13,6 @@
     <ClInclude Include="D3DDevice.h" />
     <ClInclude Include="D3DInclude.h" />
     <ClInclude Include="half.hpp" />
-    <ClInclude Include="Model.h" />
     <ClInclude Include="Rx3Model.h" />
     <ClInclude Include="Rx3Options.h" />
   </ItemGroup>
@@ -28,7 +27,6 @@
     <ClCompile Include="rx3utils.cpp" />
     <ClCompile Include="ExtractTextures.cpp" />
     <ClCompile Include="D3DDevice.cpp" />
-    <ClCompile Include="Model.cpp" />
     <ClCompile Include="Rx3Model.cpp" />
   </ItemGroup>
 </Project>

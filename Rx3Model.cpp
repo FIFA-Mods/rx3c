@@ -353,12 +353,11 @@ bool EndsWithNumber(const std::string &s, int &outNumber) {
 }
 }
 
-void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk *ibChunk, int primType, Rx3Options const &options) {
+void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk *ibChunk, Rx3Chunk *qibChunk, int primType, Rx3Options const &options) {
     using namespace helper::rx3model;
-    obj.mesh.vertexFormat = 0;
+    obj.vertexFormat = 0;
     Rx3Reader vertexDeclReader(vfChunk);
     Rx3Reader vertexBufferReader(vbChunk);
-    Rx3Reader indexBufferReader(ibChunk);
     vertexDeclReader.Skip(4);
     uint32_t declStrLen = vertexDeclReader.Read<uint32_t>();
     if (declStrLen > 0) {
@@ -371,12 +370,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
             uint32_t vs = vertexBufferReader.Read<uint32_t>();
             vertexBufferReader.Skip(4);
             auto vb = vertexBufferReader.GetCurrentPtr();
-            indexBufferReader.Skip(4);
-            uint32_t numIndices = indexBufferReader.Read<uint32_t>();
-            uint8_t is = indexBufferReader.Read<uint8_t>();
-            indexBufferReader.Skip(7);
-            auto ib = indexBufferReader.GetCurrentPtr();
-            obj.mesh.vertices.resize(numVertices);
+            obj.vertices.resize(numVertices);
             for (size_t d = 0; d < declElements.size(); d++) {
                 auto elementInfo = Split(declElements[d], ':');
                 string strUsage, strOffset, strDataType;
@@ -407,65 +401,66 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                     if (usageIndex == 0) {
                         for (uint32_t v = 0; v < numVertices; v++) {
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
-                            obj.mesh.vertices[v].pos = UnpackVector3(t, vd);
+                            obj.vertices[v].pos = UnpackVector3(t, vd);
                         }
                     }
                 }
                 else if (usage == 'n') {
                     if (usageIndex == 0) {
-                        obj.mesh.vertexFormat |= V_Normal;
+                        obj.vertexFormat |= V_Normal;
                         for (uint32_t v = 0; v < numVertices; v++) {
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
-                            obj.mesh.vertices[v].normal = UnpackVector3(t, vd);
+                            obj.vertices[v].normal = UnpackVector3(t, vd);
                         }
                     }
                 }
                 else if (usage == 'g') {
                     if (usageIndex == 0) {
-                        obj.mesh.vertexFormat |= V_Tangent;
+                        obj.vertexFormat |= V_Tangent;
                         for (uint32_t v = 0; v < numVertices; v++) {
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
-                            obj.mesh.vertices[v].tangent = UnpackVector3(t, vd);
+                            obj.vertices[v].tangent = UnpackVector3(t, vd);
                         }
                     }
                 }
                 else if (usage == 'b') {
                     if (usageIndex == 0) {
-                        obj.mesh.vertexFormat |= V_Binormal;
+                        obj.vertexFormat |= V_Binormal;
                         for (uint32_t v = 0; v < numVertices; v++) {
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
-                            obj.mesh.vertices[v].binormal = UnpackVector3(t, vd);
+                            obj.vertices[v].binormal = UnpackVector3(t, vd);
                         }
                     }
                 }
                 else if (usage == 't') {
                     if (usageIndex <= 7) {
-                        SetNumTexCoords(obj.mesh.vertexFormat, usageIndex + 1);
+                        SetNumTexCoords(obj.vertexFormat, usageIndex + 1);
                         for (uint32_t v = 0; v < numVertices; v++) {
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
-                            obj.mesh.vertices[v].uv[usageIndex] = UnpackVector2(t, vd);
+                            obj.vertices[v].uv[usageIndex] = UnpackVector2(t, vd);
+                            obj.vertices[v].uv[usageIndex].y = 1.0f - obj.vertices[v].uv[usageIndex].y;
                         }
                     }
                 }
                 else if (usage == 'c') {
                     if (usageIndex <= 7) {
-                        SetNumColors(obj.mesh.vertexFormat, usageIndex + 1);
+                        SetNumColors(obj.vertexFormat, usageIndex + 1);
                         for (uint32_t v = 0; v < numVertices; v++) {
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
-                            obj.mesh.vertices[v].colors[usageIndex] = UnpackColor(t, vd);
+                            obj.vertices[v].colors[usageIndex] = UnpackColor(t, vd);
                         }
                     }
                 }
                 else if (usage == 'i') {
                     if (usageIndex <= 1) {
-                        SetNumBones(obj.mesh.vertexFormat, (usageIndex + 1) * 4);
+                        SetNumBones(obj.vertexFormat, (usageIndex + 1) * 4);
                         if (t == dt_4u8 && (options.game == "fifa16pc" || options.game == "fifa15pc"))
                             t = dt_4u16;
                         for (uint32_t v = 0; v < numVertices; v++) {
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
                             array<float, 4> joints = UnpackVertexAttribute(t, vd);
                             for (uint32_t bi = 0; bi < 4; bi++) {
-                                obj.mesh.vertices[v].boneIndices[usageIndex * 4 + bi] =
+                                obj.vertices[v].boneIndices[usageIndex * 4 + bi] =
                                     (uint16_t)joints[bi];
                             }
                         }
@@ -477,47 +472,83 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
                             array<float, 4> weights = UnpackVertexAttribute(t, vd);
                             for (uint32_t bi = 0; bi < 4; bi++) {
-                                obj.mesh.vertices[v].boneWeights[usageIndex * 4 + bi] =
+                                obj.vertices[v].boneWeights[usageIndex * 4 + bi] =
                                     weights[bi];
                             }
                         }
                     }
                 }
             }
-            if (is == 1 || is == 2 || is == 4) {
-                auto GetIndex = [](const void *buffer, uint32_t index, uint8_t stride) -> uint32_t {
-                    auto base = static_cast<const uint8_t *>(buffer) + index * stride;
-                    switch (stride) {
-                    case 1: return *reinterpret_cast<const uint8_t *>(base);
-                    case 2: return *reinterpret_cast<const uint16_t *>(base);
-                    case 4: return *reinterpret_cast<const uint32_t *>(base);
-                    }
-                    return 0;
-                };
-                auto &triangles = obj.mesh.triangles;
-                if (primType == RX3_PRIM_TRIANGLELIST) {
-                    triangles.resize(numIndices / 3);
-                    for (size_t t = 0; t < triangles.size(); ++t) {
-                        uint32_t i0 = GetIndex(ib, t * 3 + 0, is);
-                        uint32_t i1 = GetIndex(ib, t * 3 + 1, is);
-                        uint32_t i2 = GetIndex(ib, t * 3 + 2, is);
-                        triangles[t] = { i0, i1, i2 };
+            if (options.exportQuads && qibChunk) {
+                Rx3Reader indexBufferReader(qibChunk);
+                indexBufferReader.Skip(4);
+                uint32_t numIndices = indexBufferReader.Read<uint32_t>();
+                uint8_t is = indexBufferReader.Read<uint8_t>();
+                indexBufferReader.Skip(7);
+                auto ib = indexBufferReader.GetCurrentPtr();
+                if (is == 1 || is == 2 || is == 4) {
+                    auto GetIndex = [](const void *buffer, uint32_t index, uint8_t stride) -> uint32_t {
+                        auto base = static_cast<const uint8_t *>(buffer) + index * stride;
+                        switch (stride) {
+                        case 1: return *reinterpret_cast<const uint8_t *>(base);
+                        case 2: return *reinterpret_cast<const uint16_t *>(base);
+                        case 4: return *reinterpret_cast<const uint32_t *>(base);
+                        }
+                        return 0;
+                    };
+                    auto &quads = obj.meshes.emplace_back().quads;
+                    quads.resize(numIndices / 4);
+                    for (size_t t = 0; t < quads.size(); ++t) {
+                        uint32_t i0 = GetIndex(ib, t * 4 + 0, is);
+                        uint32_t i1 = GetIndex(ib, t * 4 + 1, is);
+                        uint32_t i2 = GetIndex(ib, t * 4 + 2, is);
+                        uint32_t i3 = GetIndex(ib, t * 4 + 3, is);
+                        quads[t] = { i0, i1, i2, i3 };
                     }
                 }
-                else if (primType == RX3_PRIM_TRIANGLESTRIP) {
-                    if (numIndices >= 3) {
-                        for (size_t k = 0; k + 2 < numIndices; ++k) {
-                            uint32_t i0 = GetIndex(ib, k + 0, is);
-                            uint32_t i1 = GetIndex(ib, k + 1, is);
-                            uint32_t i2 = GetIndex(ib, k + 2, is);
-                            std::array<uint32_t, 3> tri;
-                            if ((k & 1) == 0)
-                                tri = { i0, i1, i2 };
-                            else
-                                tri = { i1, i0, i2 };
-                            if (tri[0] == tri[1] || tri[1] == tri[2] || tri[0] == tri[2])
-                                continue;
-                            triangles.push_back(tri);
+            }
+            else {
+                Rx3Reader indexBufferReader(ibChunk);
+                indexBufferReader.Skip(4);
+                uint32_t numIndices = indexBufferReader.Read<uint32_t>();
+                uint8_t is = indexBufferReader.Read<uint8_t>();
+                indexBufferReader.Skip(7);
+                auto ib = indexBufferReader.GetCurrentPtr();
+                if (is == 1 || is == 2 || is == 4) {
+                    auto GetIndex = [](const void *buffer, uint32_t index, uint8_t stride) -> uint32_t {
+                        auto base = static_cast<const uint8_t *>(buffer) + index * stride;
+                        switch (stride) {
+                        case 1: return *reinterpret_cast<const uint8_t *>(base);
+                        case 2: return *reinterpret_cast<const uint16_t *>(base);
+                        case 4: return *reinterpret_cast<const uint32_t *>(base);
+                        }
+                        return 0;
+                    };
+                    auto &triangles = obj.meshes.emplace_back().triangles;
+                    if (primType == RX3_PRIM_TRIANGLELIST) {
+                        triangles.resize(numIndices / 3);
+                        for (size_t t = 0; t < triangles.size(); ++t) {
+                            uint32_t i0 = GetIndex(ib, t * 3 + 0, is);
+                            uint32_t i1 = GetIndex(ib, t * 3 + 1, is);
+                            uint32_t i2 = GetIndex(ib, t * 3 + 2, is);
+                            triangles[t] = { i0, i1, i2 };
+                        }
+                    }
+                    else if (primType == RX3_PRIM_TRIANGLESTRIP) {
+                        if (numIndices >= 3) {
+                            for (size_t k = 0; k + 2 < numIndices; ++k) {
+                                uint32_t i0 = GetIndex(ib, k + 0, is);
+                                uint32_t i1 = GetIndex(ib, k + 1, is);
+                                uint32_t i2 = GetIndex(ib, k + 2, is);
+                                std::array<uint32_t, 3> tri;
+                                if ((k & 1) == 0)
+                                    tri = { i0, i1, i2 };
+                                else
+                                    tri = { i1, i0, i2 };
+                                if (tri[0] == tri[1] || tri[1] == tri[2] || tri[0] == tri[2])
+                                    continue;
+                                triangles.push_back(tri);
+                            }
                         }
                     }
                 }
@@ -530,6 +561,7 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, path const &rx3path, Rx3Op
     using namespace helper::rx3model;
     Model model;
     auto indexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_INDEX_BUFFER);
+    auto quadBufferChunks = rx3.FindAllChunks(RX3_CHUNK_QUAD_INDEX_BUFFER);
     auto vertexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_VERTEX_BUFFER);
     auto vertexFormatChunks = rx3.FindAllChunks(RX3_CHUNK_VERTEX_FORMAT);
     auto meshChunks = rx3.FindAllChunks(RX3_CHUNK_SIMPLE_MESH);
@@ -588,15 +620,10 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, path const &rx3path, Rx3Op
                 bones.resize(numBones);
                 for (uint32_t b = 0; b < numBones; b++)
                     bones[b].name = (b < boneNames.size()) ? boneNames[b] : "bone_" + to_string(b);
-                vector<std::array<Vector4, 4>> boneInversedMatrices(numBones);
-                memcpy(boneInversedMatrices.data(), boneMatricesReader.GetCurrentPtr(), boneInversedMatrices.size() * sizeof(std::array<float, 16>));
-                vector<Matrix4x4> fbxBoneInverseMatrices(numBones);
-                vector<Matrix4x4> fbxBoneMatrices(numBones);
-                for (uint32_t b = 0; b < numBones; b++) {
-                    for (uint32_t r = 0; r < 4; r++)
-                        fbxBoneInverseMatrices[b].mData[r] = boneInversedMatrices[b][r].ToFbx();
-                    bones[b].transform = fbxBoneInverseMatrices[b].Inverse();
-                }
+                vector<Matrix4x4> boneInversedMatrices(numBones);
+                memcpy(boneInversedMatrices.data(), boneMatricesReader.GetCurrentPtr(), boneInversedMatrices.size() * sizeof(Matrix4x4));
+                for (uint32_t b = 0; b < numBones; b++)
+                    bones[b].matrix = boneInversedMatrices[b].Inversed();
                 Rx3Reader skeletonReader(skeletonChunk);
                 skeletonReader.Skip(16);
                 for (uint32_t b = 0; b < numBones; b++) {
@@ -611,7 +638,7 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, path const &rx3path, Rx3Op
                     }
                     if (parentIndex >= 0 && parentIndex < (int32_t)bones.size()) {
                         bones[b].parent = bones[parentIndex].name;
-                        bones[b].transform = fbxBoneInverseMatrices[parentIndex] * bones[b].transform;
+                        bones[b].matrix = boneInversedMatrices[parentIndex] * bones[b].matrix;
                     }
                 }
             }
@@ -620,7 +647,8 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, path const &rx3path, Rx3Op
             auto &obj = model.objects[i];
             obj.name = i < meshNames.size() ? meshNames[i] : "object_" + to_string(i);
             int primType = i < primTypes.size() ? primTypes[i] : RX3_PRIM_TRIANGLELIST;
-            SetupObjectMesh(obj, vertexFormatChunks[i], vertexBufferChunks[i], indexBufferChunks[i], primType, options);
+            auto quadBuffer = quadBufferChunks.size() == indexBufferChunks.size() ? quadBufferChunks[i] : nullptr;
+            SetupObjectMesh(obj, vertexFormatChunks[i], vertexBufferChunks[i], indexBufferChunks[i], quadBuffer, primType, options);
         }
     }
     return model;
@@ -630,6 +658,7 @@ Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options
     using namespace helper::rx3model;
     Model model;
     auto indexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_INDEX_BUFFER);
+    auto quadBufferChunks = rx3.FindAllChunks(RX3_CHUNK_QUAD_INDEX_BUFFER);
     auto vertexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_VERTEX_BUFFER);
     auto vertexFormatChunks = rx3.FindAllChunks(RX3_CHUNK_VERTEX_FORMAT);
     auto meshChunks = rx3.FindAllChunks(RX3_CHUNK_SIMPLE_MESH);
@@ -724,12 +753,12 @@ Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options
                     colObj.name = collisionReader.ReadString();
                     collisionReader.Skip(4);
                     auto numTriangles = collisionReader.Read<uint32_t>();
-                    colObj.mesh.triangles.resize(numTriangles);
-                    colObj.mesh.vertices.resize(numTriangles * 3);
+                    colObj.firstMesh().triangles.resize(numTriangles);
+                    colObj.vertices.resize(numTriangles * 3);
                     for (uint32_t tri = 0; tri < numTriangles; tri++) {
                         for (uint32_t v = 0; v < 3; v++) {
-                            colObj.mesh.triangles[tri][v] = tri * 3 + v;
-                            colObj.mesh.vertices[tri * 3 + v].pos = collisionReader.Read<Vector3>();
+                            colObj.firstMesh().triangles[tri][v] = tri * 3 + v;
+                            colObj.vertices[tri * 3 + v].pos = collisionReader.Read<Vector3>();
                         }
                     }
                 }
@@ -738,9 +767,7 @@ Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options
                 if (instanceIdx < sceneInstanceChunks.size()) {
                     Rx3Reader scenInstanceReader(sceneInstanceChunks[instanceIdx]);
                     scenInstanceReader.Skip(16);
-                    auto transform = scenInstanceReader.Read<std::array<Vector4, 4>>();
-                    for (uint32_t r = 0; r < 4; r++)
-                        model.objects[layerIdx].transform.mData[r] = transform[r].ToFbx();
+                    model.objects[layerIdx].transform = scenInstanceReader.Read<Matrix4x4>();
                     scenInstanceReader.Skip(32);
                     auto numMeshes = scenInstanceReader.Read<uint32_t>();
                     scenInstanceReader.Skip(4);
@@ -753,9 +780,10 @@ Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options
                             meshObj.name = meshIdx < meshNames.size() ? meshNames[meshIdx] : "object_" + to_string(model.objects.size());
                             meshObj.parent = model.objects[layerIdx].name;
                             int primType = meshIdx < primTypes.size() ? primTypes[meshIdx] : RX3_PRIM_TRIANGLELIST;
-                            SetupObjectMesh(meshObj, vertexFormatChunks[meshIdx], vertexBufferChunks[meshIdx], indexBufferChunks[meshIdx], primType, options);
+                            auto quadBuffer = quadBufferChunks.size() == indexBufferChunks.size() ? quadBufferChunks[meshIdx] : nullptr;
+                            SetupObjectMesh(meshObj, vertexFormatChunks[meshIdx], vertexBufferChunks[meshIdx], indexBufferChunks[meshIdx], quadBuffer, primType, options);
                             if (materialIdx < model.materials.size())
-                                meshObj.mesh.material = model.materials[materialIdx].name;
+                                meshObj.firstMesh().material = model.materials[materialIdx].name;
                         }
                     }
                 }
@@ -772,11 +800,9 @@ Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options
                 auto &locationObj = model.objects.emplace_back();
                 locationObj.name = i < locationNames.size() ? locationNames[i] : "location_" + to_string(i + 1);
                 locationObj.parent = "Locations";
-                locationObj.transform.SetIdentity();
-                const double radToDeg = 180.0 / M_PI;
-                FbxVector4 rotDegrees = FbxVector4((double)rot.x * radToDeg, (double)rot.y * radToDeg, (double)rot.z * radToDeg);
-                locationObj.transform.SetR(rotDegrees);
-                locationObj.transform.SetT(pos.ToFbx());
+                const float radToDeg = static_cast<float>(180.0 / M_PI);
+                locationObj.transform.SetRotation({ (float)rot.x * radToDeg, (float)rot.y * radToDeg, (float)rot.z * radToDeg });
+                locationObj.transform.SetTranslation(pos);
             }
         }
         if (!crowdPath.empty()) {
@@ -882,44 +908,44 @@ Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options
                         else
                             continue;
                         Object &obj = tiers[tier];
-                        size_t vertIndex = obj.mesh.vertices.size();
-                        size_t triIndex = obj.mesh.triangles.size();
-                        obj.mesh.vertices.resize(vertIndex + 4);
-                        obj.mesh.triangles.resize(triIndex + 4);
+                        size_t vertIndex = obj.vertices.size();
+                        size_t triIndex = obj.firstMesh().triangles.size();
+                        obj.vertices.resize(vertIndex + 4);
+                        obj.firstMesh().triangles.resize(triIndex + 4);
                         const float SeatScale = 30.0f;
-                        FbxVector4 rect[4] = {
-                        { -SeatScale, 0, 0, 1 },
-                        { -SeatScale, SeatScale * 2, 0, 1 },
-                        {  SeatScale, SeatScale * 2, 0, 1 },
-                        {  SeatScale, 0, 0, 1 }
+                        Vector3 rect[4] = {
+                        { -SeatScale, 0, 0 },
+                        { -SeatScale, SeatScale * 2, 0 },
+                        {  SeatScale, SeatScale * 2, 0 },
+                        {  SeatScale, 0, 0 }
                         };
-                        FbxAMatrix mat;
+                        Matrix4x4 mat;
                         mat.SetIdentity();
-                        mat.SetR(FbxVector4(0.0, angle + 90.0, 0.0, 0.0));
-                        mat.SetT(pos.ToFbx());
+                        mat.SetRotation({ 0.0f, angle + 90.0f, 0.0f });
+                        mat.SetTranslation(pos);
                         for (size_t v = 0; v < 4; v++) {
-                            FbxVector4 globalPos = mat.MultT(rect[v]);
-                            obj.mesh.vertices[vertIndex + v].pos = FbxDouble3(globalPos[0], globalPos[1], globalPos[2]);
-                            obj.mesh.vertices[vertIndex + v].colors[0] = seatcolor;
-                            obj.mesh.vertices[vertIndex + v].colors[1] = shade;
-                            obj.mesh.vertices[vertIndex + v].colors[2] = RGBA(section0, section0, section0, 255);
-                            obj.mesh.vertices[vertIndex + v].colors[3] = RGBA(section1, section1, section1, 255);
-                            obj.mesh.vertices[vertIndex + v].colors[4] = RGBA(attendance, attendance, attendance, 255);
-                            obj.mesh.vertices[vertIndex + v].colors[5] = RGBA(nochair, nochair, nochair, 255);
-                            obj.mesh.vertices[vertIndex + v].colors[6] = cardcolors;
-                            obj.mesh.vertices[vertIndex + v].colors[7] = RGBA(crowdpattern, crowdpattern, crowdpattern, 255);
+                            Vector3 globalPos = mat * rect[v];
+                            obj.vertices[vertIndex + v].pos.Set(globalPos[0], globalPos[1], globalPos[2]);
+                            obj.vertices[vertIndex + v].colors[0] = seatcolor;
+                            obj.vertices[vertIndex + v].colors[1] = shade;
+                            obj.vertices[vertIndex + v].colors[2] = RGBA(section0, section0, section0, 255);
+                            obj.vertices[vertIndex + v].colors[3] = RGBA(section1, section1, section1, 255);
+                            obj.vertices[vertIndex + v].colors[4] = RGBA(attendance, attendance, attendance, 255);
+                            obj.vertices[vertIndex + v].colors[5] = RGBA(nochair, nochair, nochair, 255);
+                            obj.vertices[vertIndex + v].colors[6] = cardcolors;
+                            obj.vertices[vertIndex + v].colors[7] = RGBA(crowdpattern, crowdpattern, crowdpattern, 255);
                         }
-                        obj.mesh.triangles[triIndex] = { vertIndex + 2, vertIndex + 1, vertIndex + 0 };
-                        obj.mesh.triangles[triIndex + 1] = { vertIndex + 0, vertIndex + 3, vertIndex + 2 };
+                        obj.firstMesh().triangles[triIndex] = {vertIndex + 2, vertIndex + 1, vertIndex + 0};
+                        obj.firstMesh().triangles[triIndex + 1] = { vertIndex + 0, vertIndex + 3, vertIndex + 2 };
                     }
                     std::string layerNames[] = { "SeatColor", "Shade", "NeutralHomeAway", "UltraHomeAway", "Attendance", "NoChair",
                         "CardColors", "CrowdPattern"};
                     for (auto &[tier, obj] : tiers) {
                         obj.name = "tier_" + std::to_string(tier);
                         obj.parent = "Crowd";
-                        obj.mesh.vertexFormat = V_8Colors;
+                        obj.vertexFormat = V_8Colors;
                         for (size_t l = 0; l < std::size(layerNames); l++)
-                            obj.mesh.colorLayerNames[l] = layerNames[l];
+                            obj.colorLayerNames[l] = layerNames[l];
                         model.objects.push_back(obj);
                     }
                 }
@@ -937,4 +963,10 @@ Model ModelFromRX3(path const &rx3path, Rx3Options const &options) {
     else if (rx3.FindFirstChunk(RX3_CHUNK_SIMPLE_MESH))
         return ModelFromSimpleMeshContainer(rx3, rx3path, options);
     return Model();
+}
+
+void ModelToRX3SimpleMesh(Model const &model, std::filesystem::path const &rx3path, Rx3Options const &options) {
+    Rx3Container rx3;
+    vector<vector<unsigned char>> vbs, ibs, boneremap;
+
 }

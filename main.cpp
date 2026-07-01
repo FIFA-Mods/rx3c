@@ -26,7 +26,10 @@ enum OperationType {
 };
 
 int wmain(int argc, wchar_t *argv[]) {
-    CommandLine cmd(argc, argv, { L"i", L"o", L"game", L"skeleton", L"model", L"texture" }, { L"export", L"import", L"recursive", L"silent", L"console" });
+    CommandLine cmd(argc, argv,
+        { L"i", L"o", L"game", L"skeleton", L"model", L"texture" },
+        { L"export", L"import", L"recursive", L"silent", L"console", L"exportQuads" }
+    );
     if (cmd.HasOption(L"silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -82,6 +85,7 @@ int wmain(int argc, wchar_t *argv[]) {
         rx3options.textureFormat = ToLower(WtoA(cmd.GetArgumentString(L"texture")));
     if (cmd.HasArgument(L"skeleton"))
         rx3options.skeletonPath = cmd.GetArgumentPath(L"skeleton");
+    rx3options.exportQuads = cmd.HasOption(L"exportQuads");
 
     globalVars().device = new D3DDevice();
 

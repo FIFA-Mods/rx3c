@@ -7,4 +7,5 @@ struct Rx3Options {
     std::string textureFormat;
     std::string modelFormat;
     std::filesystem::path skeletonPath;
+    bool exportQuads = false;
 };

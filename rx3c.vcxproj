@@ -44,14 +44,14 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>C:\Program Files\Autodesk\FBX\FBX SDK\2019.5\include;D:\Projects\DXSDK\9.0c\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\DXSDK\9.0c\Include;D:\Projects\ModelLibrary\Model;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>C:\Program Files\Autodesk\FBX\FBX SDK\2019.5\lib\vs2017\x86\release;D:\Projects\DXSDK\9.0c\Lib\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libfbxsdk-mt.lib;libxml2-mt.lib;zlib-mt.lib;d3d9.lib;d3dx9.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>D:\Projects\DXSDK\9.0c\Lib\x86;D:\Projects\ModelLibrary\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Model.lib;d3d9.lib;d3dx9.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -64,7 +64,6 @@
     <ClInclude Include="ExtractTextures.h" />
     <ClInclude Include="half.hpp" />
     <ClInclude Include="memory.h" />
-    <ClInclude Include="Model.h" />
     <ClInclude Include="Rx3Container.h" />
     <ClInclude Include="Rx3Model.h" />
     <ClInclude Include="Rx3Options.h" />
@@ -80,7 +79,6 @@
     <ClCompile Include="ExtractTextures.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="memory.cpp" />
-    <ClCompile Include="Model.cpp" />
     <ClCompile Include="Rx3Container.cpp" />
     <ClCompile Include="Rx3Model.cpp" />
     <ClCompile Include="rx3utils.cpp" />
