@@ -139,6 +139,7 @@ void Rx3Writer::Reserve(size_t size) {
 }
 
 Rx3Container::Rx3Container(path const &rx3path) {
+    mBigEndian = false;
     Load(rx3path);
 }
 
@@ -155,14 +156,12 @@ bool Rx3Container::Load(path const &rx3path) {
             uint8_t *fileData = new uint8_t[fileSize];
             fread(fileData, 1, fileSize, file);
             Rx3Reader reader(fileData);
-            int fileType = 0;
             uint32_t magic = reader.Read<uint32_t>();
-            if (magic == 'l3XR')
-                fileType = 1;
-            else if (magic == 'b3XR')
-                fileType = 2;
-            if (fileType == 1 || fileType == 2) {
-                reader.SetBigEndian(fileType == 2);
+            bool littleEndian = magic == 'l3XR';
+            bool bigEndian = magic == 'b3XR';
+            if (littleEndian || bigEndian) {
+                mBigEndian = bigEndian;
+                reader.SetBigEndian(bigEndian);
                 reader.Skip(8);
                 uint32_t numChunks = reader.Read<uint32_t>();
                 if (numChunks > 0) {
@@ -173,6 +172,7 @@ bool Rx3Container::Load(path const &rx3path) {
                         uint32_t size = reader.Read<uint32_t>();
                         reader.Skip(4);
                         mChunks[s].mId = id;
+                        mChunks[s].mBigEndian = mBigEndian;
                         if (size > 0) {
                             mChunks[s].mData.resize(size);
                             memcpy(mChunks[s].mData.data(), &fileData[offset], size);
@@ -226,7 +226,7 @@ bool Rx3Container::Save(path const &rx3path) {
 }
 
 Rx3Container::Rx3Container() {
-
+    mBigEndian = false;
 }
 
 Rx3Chunk *Rx3Container::FindFirstChunk(uint32_t chunkId) {

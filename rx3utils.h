@@ -125,3 +125,8 @@ std::wstring GetStringWithoutUnicodeChars(std::wstring const &src);
 
 std::vector<std::wstring> FileToLinesW(std::filesystem::path const &filePath, std::wstring const &commentLineBegin = std::wstring());
 std::vector<std::string> FileToLinesA(std::filesystem::path const &filePath, std::string const &commentLineBegin = std::string());
+
+bool StartsWith(std::wstring const &str, std::wstring const &what);
+bool StartsWith(std::string const &str, std::string const &what);
+bool IsNumber(std::wstring const &str, bool hexadecimal);
+bool IsNumber(std::string const &str, bool hexadecimal);

@@ -44,45 +44,40 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>D:\Projects\DXSDK\9.0c\Include;D:\Projects\ModelLibrary\Model;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\fifam\generic;D:\Projects\ModelLibrary\Model;D:\Projects\DirectXTex\DirectXTex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>D:\Projects\DXSDK\9.0c\Lib\x86;D:\Projects\ModelLibrary\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>Model.lib;d3d9.lib;d3dx9.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>D:\Projects\fifam\output\libs;D:\Projects\ModelLibrary\lib;D:\Projects\DirectXTex\DirectXTex\Bin\Desktop_2022\Win32\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>generic.lib;Model.lib;DirectXTex.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="commandline.h" />
-    <ClInclude Include="D3DDevice.h" />
-    <ClInclude Include="D3DInclude.h" />
     <ClInclude Include="errormsg.h" />
-    <ClInclude Include="ExtractNames.h" />
-    <ClInclude Include="ExtractTextures.h" />
+    <ClInclude Include="Rx3Names.h" />
+    <ClInclude Include="Rx3Textures.h" />
     <ClInclude Include="half.hpp" />
     <ClInclude Include="memory.h" />
     <ClInclude Include="Rx3Container.h" />
     <ClInclude Include="Rx3Model.h" />
     <ClInclude Include="Rx3Options.h" />
     <ClInclude Include="rx3utils.h" />
-    <ClInclude Include="shared.h" />
     <ClInclude Include="winheader.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="commandline.cpp" />
-    <ClCompile Include="D3DDevice.cpp" />
     <ClCompile Include="errormsg.cpp" />
-    <ClCompile Include="ExtractNames.cpp" />
-    <ClCompile Include="ExtractTextures.cpp" />
+    <ClCompile Include="Rx3Names.cpp" />
+    <ClCompile Include="Rx3Textures.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="memory.cpp" />
     <ClCompile Include="Rx3Container.cpp" />
     <ClCompile Include="Rx3Model.cpp" />
     <ClCompile Include="rx3utils.cpp" />
-    <ClCompile Include="shared.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

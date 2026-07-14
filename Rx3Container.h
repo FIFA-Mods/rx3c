@@ -11,6 +11,7 @@ void Rx3SwapEndian(uint32_t &value);
 void Rx3SwapEndian(uint16_t &value);
 void Rx3SwapEndian(int32_t &value);
 void Rx3SwapEndian(int16_t &value);
+void Rx3SwapEndian(float &value);
 
 constexpr uint32_t Rx3Hash(const char *str) {
     uint32_t result = 5321;
@@ -54,13 +55,17 @@ enum Rx3TextureBaseFormat : uint8_t {
     RX3_TEXFORMAT_DXT1 = 0,
     RX3_TEXFORMAT_DXT3 = 1,
     RX3_TEXFORMAT_DXT5 = 2,
-    RX3_TEXFORMAT_ARGB8888 = 3, // R8G8B8A8
+    RX3_TEXFORMAT_ARGB8888 = 3,
     RX3_TEXFORMAT_L8 = 4,
     RX3_TEXFORMAT_AL8 = 5,
     RX3_TEXFORMAT_RG8 = 6,
-    RX3_TEXFORMAT_RAW = 7,
-    RX3_TEXFORMAT_ATI2 = 7, // Switch; also known as BC5 compression
-    RX3_TEXFORMAT_ATI1 = 12, // Switch; also known as BC4 compression
+    RX3_TEXFORMAT_BC5 = 7,
+    RX3_TEXFORMAT_RGB565 = 8,
+    RX3_TEXFORMAT_ARGB4444 = 9,
+    RX3_TEXFORMAT_BC6 = 10, // BC6uf
+    RX3_TEXFORMAT_BC7 = 11,
+    RX3_TEXFORMAT_BC4 = 12,
+    RX3_TEXFORMAT_NUM_FORMATS
 };
 
 enum Rx3TextureType : uint8_t {

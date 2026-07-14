@@ -1,10 +1,12 @@
-#include "shared.h"
 #include "commandline.h"
 #include "errormsg.h"
-#include "ExtractTextures.h"
 #include "Model.h"
 #include "Rx3Model.h"
+#include "Rx3Textures.h"
+#include "TextFileTable.h"
 #include <string>
+#include <windows.h>
+#include <shobjidl.h>
 
 const char *RX3C_VERSION = "0.100";
 const unsigned int RX3C_VERSION_INT = 100;
@@ -16,7 +18,8 @@ enum ErrorType {
     NO_INPUT_PATH = 3,
     INVALID_INPUT_PATH = 4,
     INVALID_OUTPUT_PATH = 5,
-    ERROR_OTHER = 6
+    FAILED_TO_INITIALIZE = 6,
+    ERROR_OTHER = 7
 };
 
 enum OperationType {
@@ -27,8 +30,8 @@ enum OperationType {
 
 int wmain(int argc, wchar_t *argv[]) {
     CommandLine cmd(argc, argv,
-        { L"i", L"o", L"game", L"skeleton", L"model", L"texture" },
-        { L"export", L"import", L"recursive", L"silent", L"console", L"exportQuads" }
+        { L"i", L"o", L"game", L"skeleton", L"model", L"texture", L"folderOption", L"texFormatFile"},
+        { L"export", L"import", L"recursive", L"silent", L"console", L"exportQuads", L"writeHDR", L"writeTexMetadata"}
     );
     if (cmd.HasOption(L"silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
@@ -62,8 +65,9 @@ int wmain(int argc, wchar_t *argv[]) {
     if (hasOutput) {
         o = cmd.GetArgumentPath(L"o");
         if (!exists(o)) {
-            ErrorMessage("Output path does not exist");
-            return ErrorType::INVALID_OUTPUT_PATH;
+            //ErrorMessage("Output path does not exist");
+            //return ErrorType::INVALID_OUTPUT_PATH;
+            create_directories(o);
         }
     }
     else {
@@ -76,6 +80,11 @@ int wmain(int argc, wchar_t *argv[]) {
                 o = current_path();
         }
     }
+
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(hr))
+        return FAILED_TO_INITIALIZE;
+
     Rx3Options rx3options;
     if (cmd.HasArgument(L"game"))
         rx3options.game = ToLower(WtoA(cmd.GetArgumentString(L"game")));
@@ -85,17 +94,35 @@ int wmain(int argc, wchar_t *argv[]) {
         rx3options.textureFormat = ToLower(WtoA(cmd.GetArgumentString(L"texture")));
     if (cmd.HasArgument(L"skeleton"))
         rx3options.skeletonPath = cmd.GetArgumentPath(L"skeleton");
+    if (cmd.HasArgument(L"folderOption")) {
+        auto strFolderOption = ToLower(cmd.GetArgumentString(L"folderOption"));
+        if (strFolderOption == L"alwaysCreate")
+            rx3options.folderOption = FOLDER_OPTION_ALWAYS_CREATE;
+        else if (strFolderOption == L"neverCreate")
+            rx3options.folderOption = FOLDER_OPTION_NEVER_CREATE;
+    }
+    if (cmd.HasArgument(L"skeleton"))
+        rx3options.skeletonPath = cmd.GetArgumentPath(L"skeleton");
     rx3options.exportQuads = cmd.HasOption(L"exportQuads");
-
-    globalVars().device = new D3DDevice();
+    rx3options.writeHDR = cmd.HasOption(L"writeHDR");
+    rx3options.writeTexMetadata = cmd.HasOption(L"writeTexMetadata");
+    if (cmd.HasArgument(L"texFormatFile"))
+        ReadTexFormatFile(cmd.GetArgumentPath(L"texFormatFile"), rx3options.texTargetFormats);
 
     auto ExportRX3 = [&](path const &in, path const &outFolder) {
-        if (!exists(outFolder))
-            create_directories(outFolder);
         Model m = ModelFromRX3(in, rx3options);
-        if (!m.objects.empty() || !m.skeleton.bones.empty())
-            m.WriteFbx(outFolder / (in.stem().wstring() + L".fbx"), rx3options.modelFormat == "fbxascii");
-        ExtractTexturesFromRX3(in, outFolder / in.stem(), rx3options);
+        if (!m.objects.empty() || !m.skeleton.bones.empty()) {
+            path modelDirctory = outFolder;
+            if (rx3options.folderOption == FOLDER_OPTION_ALWAYS_CREATE)
+                modelDirctory /= in.stem();
+            if (!exists(modelDirctory))
+                create_directories(modelDirctory);
+            m.WriteFbx(modelDirctory / (in.stem().wstring() + L".fbx"), rx3options.modelFormat == "fbxascii");
+        }
+        path textureDirectory = outFolder;
+        if (rx3options.folderOption != FOLDER_OPTION_NEVER_CREATE)
+            textureDirectory /= in.stem();
+        ExtractTexturesFromRX3(in, textureDirectory, rx3options);
     };
 
     if (operation == OperationType::OP_EXPORT) {
@@ -123,6 +150,6 @@ int wmain(int argc, wchar_t *argv[]) {
             ExportRX3(i, o);
         }
     }
-    delete globalVars().device;
+    CoUninitialize();
     return ErrorType::NONE;
 }

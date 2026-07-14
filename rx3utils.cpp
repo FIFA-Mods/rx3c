@@ -489,3 +489,55 @@ std::vector<std::string> FileToLinesA(std::filesystem::path const &filePath, std
     }
     return lines;
 }
+
+bool StartsWith(std::wstring const &str, std::wstring const &what) {
+    return !str.compare(0, what.size(), what);
+}
+
+bool StartsWith(std::string const &str, std::string const &what) {
+    return !str.compare(0, what.size(), what);
+}
+
+bool IsHexadecimalLetter(wchar_t c) {
+    return (c >= L'a' && c <= L'f') || (c >= L'A' && c <= L'F');
+}
+
+bool IsHexadecimalLetter(char c) {
+    return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+bool IsNumber(std::wstring const &str, bool hexadecimal) {
+    if (str.empty())
+        return false;
+    std::wstring cmpStr;
+    if (hexadecimal && (StartsWith(str, L"0x") || StartsWith(str, L"0X")))
+        cmpStr = str.substr(2);
+    else
+        cmpStr = str;
+    for (wchar_t c : cmpStr) {
+        if (isdigit(c))
+            continue;
+        if (hexadecimal && IsHexadecimalLetter(c))
+            continue;
+        return false;
+    }
+    return true;
+}
+
+bool IsNumber(std::string const &str, bool hexadecimal) {
+    if (str.empty())
+        return false;
+    std::string cmpStr;
+    if (hexadecimal && (StartsWith(str, "0x") || StartsWith(str, "0X")))
+        cmpStr = str.substr(2);
+    else
+        cmpStr = str;
+    for (char c : cmpStr) {
+        if (isdigit(c))
+            continue;
+        if (hexadecimal && IsHexadecimalLetter(c))
+            continue;
+        return false;
+    }
+    return true;
+}
