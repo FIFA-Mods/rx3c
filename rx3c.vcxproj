@@ -44,7 +44,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>D:\Projects\fifam\generic;D:\Projects\ModelLibrary\Model;D:\Projects\DirectXTex\DirectXTex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)utils;$(ProjectDir)Rx3;$(ProjectDir)3rdparty\half;$(ProjectDir)3rdparty\json;D:\Projects\fifam\generic;D:\Projects\ModelLibrary\Model;D:\Projects\DirectXTex\DirectXTex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -56,28 +56,31 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="commandline.h" />
-    <ClInclude Include="errormsg.h" />
-    <ClInclude Include="Rx3Names.h" />
-    <ClInclude Include="Rx3Textures.h" />
-    <ClInclude Include="half.hpp" />
-    <ClInclude Include="memory.h" />
-    <ClInclude Include="Rx3Container.h" />
-    <ClInclude Include="Rx3Model.h" />
-    <ClInclude Include="Rx3Options.h" />
-    <ClInclude Include="rx3utils.h" />
-    <ClInclude Include="winheader.h" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Rx3\Rx3Container.cpp" />
+    <ClCompile Include="Rx3\Rx3Hotspot.cpp" />
+    <ClCompile Include="Rx3\Rx3Model.cpp" />
+    <ClCompile Include="Rx3\Rx3Names.cpp" />
+    <ClCompile Include="Rx3\Rx3Options.cpp" />
+    <ClCompile Include="Rx3\Rx3Textures.cpp" />
+    <ClCompile Include="utils\commandline.cpp" />
+    <ClCompile Include="utils\errormsg.cpp" />
+    <ClCompile Include="utils\memory.cpp" />
+    <ClCompile Include="utils\rx3utils.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="commandline.cpp" />
-    <ClCompile Include="errormsg.cpp" />
-    <ClCompile Include="Rx3Names.cpp" />
-    <ClCompile Include="Rx3Textures.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="memory.cpp" />
-    <ClCompile Include="Rx3Container.cpp" />
-    <ClCompile Include="Rx3Model.cpp" />
-    <ClCompile Include="rx3utils.cpp" />
+    <ClInclude Include="Rx3\Rx3Container.h" />
+    <ClInclude Include="Rx3\Rx3Hotspot.h" />
+    <ClInclude Include="Rx3\Rx3Model.h" />
+    <ClInclude Include="Rx3\Rx3Names.h" />
+    <ClInclude Include="Rx3\Rx3Options.h" />
+    <ClInclude Include="Rx3\Rx3Textures.h" />
+    <ClInclude Include="utils\commandline.h" />
+    <ClInclude Include="utils\errormsg.h" />
+    <ClInclude Include="utils\half.hpp" />
+    <ClInclude Include="utils\memory.h" />
+    <ClInclude Include="utils\rx3utils.h" />
+    <ClInclude Include="utils\winheader.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

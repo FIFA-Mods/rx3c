@@ -5,8 +5,10 @@
 #include <wincodec.h>
 #include <fstream>
 #include "TextFileTable.h"
+#include "memory.h"
 
 using namespace DirectX;
+using namespace memory;
 
 DXGI_FORMAT MapRx3FormatToDXGI(unsigned char format) {
     switch (format) {
@@ -161,11 +163,11 @@ int TexFormatNameToID(std::string const &name) {
     return -1;
 }
 
-void ReadTexFormatFile(std::filesystem::path const &filePath, std::map<std::string, TexFormatTarget> &out) {
+void ReadTexFormatFile(std::filesystem::path const &filePath, std::map<std::string, TexFormatTarget> &out, vector<string> &outOrder) {
     if (exists(filePath)) {
         TextFileTable texFormatsTable;
         if (texFormatsTable.ReadCSV(filePath)) {
-            for (size_t r = 1; r < texFormatsTable.NumRows(); r++) {
+            for (size_t r = 0; r < texFormatsTable.NumRows(); r++) {
                 auto const &row = texFormatsTable.Row(r);
                 if (row.size() >= 2 && !row[0].empty()) {
                     string name = ToLower(WtoA(row[0]));
@@ -192,6 +194,8 @@ void ReadTexFormatFile(std::filesystem::path const &filePath, std::map<std::stri
                             }
                         }
                     }
+                    if (!out.contains(name))
+                        outOrder.push_back(name);
                     out[name] = t;
                 }
             }
@@ -199,7 +203,7 @@ void ReadTexFormatFile(std::filesystem::path const &filePath, std::map<std::stri
     }
 }
 
-void ExtractTexturesFromContainer(Rx3Container &container, path const &outputDir, Rx3Options const &rx3options) {
+void ExtractTexturesFromRX3(Rx3Container &container, path const &outputDir, Rx3Options const &rx3options) {
     vector<PackedTextureInfo> vecTexInfo;
     auto texNamesSection = container.FindFirstChunk(RX3_CHUNK_NAME_TABLE);
     vector<string> texNames;
@@ -223,7 +227,9 @@ void ExtractTexturesFromContainer(Rx3Container &container, path const &outputDir
         if (i < texNames.size() && !texNames[i].empty())
             texName = texNames[i];
         else
-            texName = "texture_" + to_string(i);
+            texName = "unnamed_" + to_string(i);
+        if (rx3options.gameConfig.TextureRasterSuffix && texName.ends_with(".Raster"))
+            texName = texName.substr(0, texName.length() - 7);
         Rx3Reader reader(textureSections[i]);
         unsigned int totalSize = reader.Read<unsigned int>();
         unsigned char type = reader.Read<unsigned char>();
@@ -379,53 +385,6 @@ void ExtractTexturesFromContainer(Rx3Container &container, path const &outputDir
             continue;
         }
     }
-    auto hotspotChunk = container.FindFirstChunk(RX3_CHUNK_HOTSPOT);
-    if (hotspotChunk) {
-        Rx3Reader hotspotReader(hotspotChunk);
-        hotspotReader.Skip(4);
-        unsigned char version = hotspotReader.Read<unsigned char>();
-        if (version == 1) {
-            unsigned char numGroups = hotspotReader.Read<unsigned char>();
-            hotspotReader.Skip(10);
-            ofstream outHotspot(outputDir / (container.mName + ".hotspot"));
-            outHotspot << "{" << std::endl;
-            outHotspot << "  \"AssetName\": \"" << container.mName << "\"," << std::endl;
-            outHotspot << "  \"HotspotFormatVersion\": " << (int)version << "," << std::endl;
-            struct HotspotEntry {
-                string name, group;
-                float bounds[4];
-            };
-            vector<HotspotEntry> hotspots;
-            for (size_t groupIndex = 0; groupIndex < numGroups; groupIndex++) {
-                string groupName = hotspotReader.ReadString();
-                unsigned char numHotspots = hotspotReader.Read<unsigned char>();
-                for (size_t hotspotIndex = 0; hotspotIndex < numHotspots; hotspotIndex++) {
-                    auto &hotspot = hotspots.emplace_back();
-                    hotspot.group = groupName;
-                    hotspot.name = hotspotReader.ReadString();
-                    for (size_t bound = 0; bound < 4; bound++)
-                        hotspot.bounds[bound] = hotspotReader.Read<float>();
-                }
-            }
-            if (!hotspots.empty()) {
-                outHotspot << "  \"Hotspots\": [" << std::endl;
-                for (auto const &h : hotspots) {
-                    outHotspot << "    {" << std::endl;
-                    outHotspot << "      \"Name\": \"" << h.name << "\"," << std::endl;
-                    outHotspot << "      \"Group\": \"" << h.group << "\"," << std::endl;
-                    outHotspot << "      \"Bounds\": {" << std::endl;
-                    outHotspot << "        \"X\": " << h.bounds[0] << "," << std::endl;
-                    outHotspot << "        \"Y\": " << h.bounds[1] << "," << std::endl;
-                    outHotspot << "        \"Z\": " << h.bounds[2] << "," << std::endl;
-                    outHotspot << "        \"W\": " << h.bounds[3] << "," << std::endl;
-                    outHotspot << "      }," << std::endl;
-                    outHotspot << "    }" << std::endl;
-                }
-                outHotspot << "  ]" << std::endl;
-            }
-            outHotspot << "}" << std::endl;
-        }
-    }
     if (rx3options.writeTexMetadata && !vecTexInfo.empty()) {
         ofstream outMetadata(outputDir / (container.mName + "_metadata.csv"));
         for (auto const &texInfo : vecTexInfo) {
@@ -436,11 +395,6 @@ void ExtractTexturesFromContainer(Rx3Container &container, path const &outputDir
             outMetadata << std::endl;
         }
     }
-}
-
-void ExtractTexturesFromRX3(path const &rx3path, path const &outputPath, Rx3Options const &rx3options) {
-    Rx3Container rx3(rx3path);
-    ExtractTexturesFromContainer(rx3, outputPath, rx3options);
 }
 
 unsigned char MapDXGIToRx3Format(DXGI_FORMAT fmt) {
@@ -491,9 +445,93 @@ size_t NextPowerOfTwo(size_t x) {
     return p;
 }
 
-bool PackTexturesToRx3Container(std::vector<PackedTextureInfo> const &textures, std::filesystem::path const &rx3path, std::map<unsigned char, unsigned char> formatConversion) {
-    Rx3Container rx3;
-    rx3.AddChunk(RX3_CHUNK_TEXTURE_BATCH);
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// Full mip chain length for a given base size (2D or volume).
+static size_t ComputeFullMipCount(size_t w, size_t h, size_t d = 1) {
+    size_t levels = 1;
+    while (w > 1 || h > 1 || d > 1) {
+        if (w > 1) w >>= 1;
+        if (h > 1) h >>= 1;
+        if (d > 1) d >>= 1;
+        levels++;
+    }
+    return levels;
+}
+
+// Walks the standard mip chain starting at (origW, origH) and returns the
+// level index whose size exactly matches (targetW, targetH), or -1 if none
+// of the first `maxLevels` levels match. Used to detect "the requested
+// downsize is just an existing mip level" so we can drop mips instead of
+// resampling.
+static int FindMipLevelForSize(size_t origW, size_t origH, size_t targetW, size_t targetH, size_t maxLevels) {
+    size_t w = origW, h = origH;
+    for (size_t level = 0; level < maxLevels; ++level) {
+        if (w == targetW && h == targetH)
+            return static_cast<int>(level);
+        if (w == 1 && h == 1)
+            break;
+        if (w > 1) w >>= 1;
+        if (h > 1) h >>= 1;
+    }
+    return -1;
+}
+
+// Builds a new ScratchImage containing only mip levels [dropLevels .. end)
+// of `src`, i.e. drops the `dropLevels` largest mips. Works for 2D, arrays,
+// cubes, and volume textures. No resampling/conversion is performed - this
+// is a straight data copy, which is only valid because the dropped-to level
+// already exists as real data in the source.
+static bool ExtractSubMipChain(ScratchImage const &src, size_t dropLevels, ScratchImage &dst) {
+    auto const &meta = src.GetMetadata();
+    if (dropLevels == 0 || dropLevels >= meta.mipLevels)
+        return false;
+
+    TexMetadata newMeta = meta;
+    newMeta.mipLevels = meta.mipLevels - dropLevels;
+    for (size_t i = 0; i < dropLevels; ++i) {
+        if (newMeta.width > 1) newMeta.width >>= 1;
+        if (newMeta.height > 1) newMeta.height >>= 1;
+        if (newMeta.dimension == TEX_DIMENSION_TEXTURE3D && newMeta.depth > 1) newMeta.depth >>= 1;
+    }
+
+    HRESULT hr = dst.Initialize(newMeta, CP_FLAGS_NONE);
+    if (FAILED(hr))
+        return false;
+
+    if (meta.dimension == TEX_DIMENSION_TEXTURE3D) {
+        for (size_t l = 0; l < newMeta.mipLevels; ++l) {
+            size_t curDepth = std::max<size_t>(1, newMeta.depth >> l);
+            for (size_t s = 0; s < curDepth; ++s) {
+                const Image *srcImg = src.GetImage(l + dropLevels, 0, s);
+                const Image *dstImg = dst.GetImage(l, 0, s);
+                if (!srcImg || !dstImg) return false;
+                memcpy(dstImg->pixels, srcImg->pixels, dstImg->slicePitch);
+            }
+        }
+    }
+    else {
+        for (size_t item = 0; item < meta.arraySize; ++item) {
+            for (size_t l = 0; l < newMeta.mipLevels; ++l) {
+                const Image *srcImg = src.GetImage(l + dropLevels, item, 0);
+                const Image *dstImg = dst.GetImage(l, item, 0);
+                if (!srcImg || !dstImg) return false;
+                memcpy(dstImg->pixels, srcImg->pixels, dstImg->slicePitch);
+            }
+        }
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Main routine
+// ---------------------------------------------------------------------------
+
+bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &textures, Rx3Options const &rx3options,
+    bool withoutNames)
+{
     for (auto const &t : textures) {
         auto ext = t.filePath.extension();
         std::string extStr = ext.string();
@@ -514,108 +552,232 @@ bool PackTexturesToRx3Container(std::vector<PackedTextureInfo> const &textures, 
         else if (isHDR) hr = LoadFromHDRFile(t.filePath.c_str(), nullptr, image);
         else continue; // Unsupported extension
 
-        if (FAILED(hr)) return false;
+        if (FAILED(hr)) {
+            ErrorMessage(Format("Failed to load texture '%s'", t.filePath.string()));
+            continue;
+        }
 
         auto const &meta = image.GetMetadata();
-        size_t originalMips = meta.mipLevels;
+        bool isVolume = meta.dimension == TEX_DIMENSION_TEXTURE3D;
 
-        // 2. Resolve Target Format
         unsigned char rx3Format = 0;
-        if (t.format == -1) {
-            if (isDDS) {
-                rx3Format = MapDXGIToRx3Format(meta.format);
-            }
-            else if (isHDR) {
-                rx3Format = RX3_TEXFORMAT_BC6;
-            }
-            else { // PNG or TGA
-                rx3Format = image.IsAlphaAllOpaque() ? RX3_TEXFORMAT_DXT1 : RX3_TEXFORMAT_DXT5;
-            }
-        }
-        else {
-            rx3Format = static_cast<unsigned char>(t.format);
-        }
-
-        // Apply fallback conversions if mapped (e.g. BC5 -> DXT5)
-        if (formatConversion.count(rx3Format)) {
-            rx3Format = formatConversion.at(rx3Format);
-        }
-
-        DXGI_FORMAT targetDxgi = MapRx3FormatToDXGI(rx3Format);
-        if (targetDxgi == DXGI_FORMAT_UNKNOWN) return false;
-
-        // 3. Resolve Dimensions & Handle Power-of-Two rules
+        DXGI_FORMAT targetDxgi = DXGI_FORMAT_UNKNOWN;
         size_t targetW = (t.width > 0) ? t.width : meta.width;
         size_t targetH = (t.height > 0) ? t.height : meta.height;
 
-        if (IsCompressed(targetDxgi)) {
-            if (!IsPowerOfTwo(targetW)) targetW = NextPowerOfTwo(targetW);
-            if (!IsPowerOfTwo(targetH)) targetH = NextPowerOfTwo(targetH);
-        }
+        if (isDDS) {
+            // -----------------------------------------------------------
+            // 2.1 DDS source: never touch format/mips unless we have to.
+            // -----------------------------------------------------------
+            unsigned char sourceRx3Format = MapDXGIToRx3Format(meta.format);
+            rx3Format = sourceRx3Format;
+            if (rx3options.gameConfig.TextureFormats.count(rx3Format))
+                rx3Format = rx3options.gameConfig.TextureFormats.at(rx3Format);
 
-        // Resize if required
-        if (targetW != meta.width || targetH != meta.height) {
-            ScratchImage resizedImage;
-            hr = Resize(image.GetImages(), image.GetImageCount(), meta, targetW, targetH, TEX_FILTER_DEFAULT, resizedImage);
-            if (FAILED(hr)) return false;
-            std::swap(image, resizedImage);
-        }
+            targetDxgi = MapRx3FormatToDXGI(rx3Format);
+            if (targetDxgi == DXGI_FORMAT_UNKNOWN) {
+                ErrorMessage(Format("Unsupported texture format ('%s')", t.filePath.string()));
+                continue;
+            }
 
-        // 4. Resolve and Generate Mipmaps
-        auto const &curMeta = image.GetMetadata();
-        bool isVolume = curMeta.dimension == TEX_DIMENSION_TEXTURE3D;
+            size_t originalMips = meta.mipLevels;
 
-        size_t maxMips = 1;
-        size_t mw = targetW, mh = targetH, md = isVolume ? curMeta.depth : 1;
-        while (mw > 1 || mh > 1 || md > 1) {
-            if (mw > 1) mw >>= 1;
-            if (mh > 1) mh >>= 1;
-            if (md > 1) md >>= 1;
-            maxMips++;
-        }
+            // Power-of-two rule against the target format. This can force a
+            // size change even if the caller never asked to resize.
+            if (IsCompressed(targetDxgi)) {
+                if (!IsPowerOfTwo(targetW)) targetW = NextPowerOfTwo(targetW);
+                if (!IsPowerOfTwo(targetH)) targetH = NextPowerOfTwo(targetH);
+            }
 
-        size_t targetMips = 1;
-        if (t.levels == 0) {
-            if (isDDS) targetMips = originalMips;
-            else if (isPNG || isTGA) targetMips = maxMips;
-            else if (isHDR) targetMips = 1;
+            bool needResize = (targetW != meta.width || targetH != meta.height);
+
+            // If we're shrinking, see if the requested size is already one
+            // of the source's own mip levels - if so, just drop the larger
+            // mips instead of resampling.
+            if (needResize) {
+                int dropLevel = FindMipLevelForSize(meta.width, meta.height, targetW, targetH, originalMips);
+                if (dropLevel > 0) {
+                    ScratchImage dropped;
+                    if (ExtractSubMipChain(image, static_cast<size_t>(dropLevel), dropped)) {
+                        std::swap(image, dropped);
+                        needResize = false;
+                    }
+                }
+            }
+
+            if (needResize) {
+                // Real resize path: decompress -> resize -> regen mips (if
+                // the source had any) -> convert/compress to target format.
+                auto const &preMeta = image.GetMetadata();
+                if (IsCompressed(preMeta.format)) {
+                    ScratchImage decompressed;
+                    hr = Decompress(image.GetImages(), image.GetImageCount(), preMeta, DXGI_FORMAT_UNKNOWN, decompressed);
+                    if (FAILED(hr)) {
+                        ErrorMessage(Format("Failed to decompress texture ('%s')", t.filePath.string()));
+                        continue;
+                    }
+                    std::swap(image, decompressed);
+                }
+
+                auto const &resizeSrcMeta = image.GetMetadata();
+                ScratchImage resized;
+                hr = Resize(image.GetImages(), image.GetImageCount(), resizeSrcMeta, targetW, targetH, TEX_FILTER_DEFAULT, resized);
+                if (FAILED(hr)) {
+                    ErrorMessage(Format("Failed to resize texture ('%s')", t.filePath.string()));
+                    continue;
+                }
+                std::swap(image, resized);
+
+                if (originalMips > 1) {
+                    auto const &postResizeMeta = image.GetMetadata();
+                    size_t depthForMips = isVolume ? postResizeMeta.depth : 1;
+                    size_t newMaxMips = ComputeFullMipCount(targetW, targetH, depthForMips);
+                    if (postResizeMeta.mipLevels != newMaxMips) {
+                        ScratchImage mipImage;
+                        if (isVolume)
+                            hr = GenerateMipMaps3D(image.GetImages(), image.GetImageCount(), postResizeMeta, TEX_FILTER_DEFAULT, newMaxMips, mipImage);
+                        else
+                            hr = GenerateMipMaps(image.GetImages(), image.GetImageCount(), postResizeMeta, TEX_FILTER_DEFAULT, newMaxMips, mipImage);
+                        if (FAILED(hr)) {
+                            ErrorMessage(Format("Failed to generate texture mipmaps ('%s')", t.filePath.string()));
+                            continue;
+                        }
+                        std::swap(image, mipImage);
+                    }
+                }
+
+                auto const &curFormatMeta = image.GetMetadata();
+                if (curFormatMeta.format != targetDxgi) {
+                    ScratchImage converted;
+                    if (IsCompressed(targetDxgi))
+                        hr = Compress(image.GetImages(), image.GetImageCount(), curFormatMeta, targetDxgi, TEX_COMPRESS_DEFAULT, TEX_THRESHOLD_DEFAULT, converted);
+                    else
+                        hr = Convert(image.GetImages(), image.GetImageCount(), curFormatMeta, targetDxgi, TEX_FILTER_DEFAULT, TEX_THRESHOLD_DEFAULT, converted);
+                    if (FAILED(hr)) {
+                        ErrorMessage(Format("Failed to convert texture format ('%s')", t.filePath.string()));
+                        continue;
+                    }
+                    std::swap(image, converted);
+                }
+            }
+            else {
+                // No resize needed (either nothing requested, or handled via
+                // mip-drop above). Only touch format if it actually differs.
+                auto const &curMeta = image.GetMetadata();
+                if (curMeta.format != targetDxgi) {
+                    if (IsCompressed(curMeta.format)) {
+                        ScratchImage decompressed;
+                        hr = Decompress(image.GetImages(), image.GetImageCount(), curMeta, DXGI_FORMAT_UNKNOWN, decompressed);
+                        if (FAILED(hr)) {
+                            ErrorMessage(Format("Failed to decompress texture ('%s')", t.filePath.string()));
+                            continue;
+                        }
+                        std::swap(image, decompressed);
+                    }
+                    auto const &decompMeta = image.GetMetadata();
+                    if (decompMeta.format != targetDxgi) {
+                        ScratchImage converted;
+                        if (IsCompressed(targetDxgi))
+                            hr = Compress(image.GetImages(), image.GetImageCount(), decompMeta, targetDxgi, TEX_COMPRESS_DEFAULT, TEX_THRESHOLD_DEFAULT, converted);
+                        else
+                            hr = Convert(image.GetImages(), image.GetImageCount(), decompMeta, targetDxgi, TEX_FILTER_DEFAULT, TEX_THRESHOLD_DEFAULT, converted);
+                        if (FAILED(hr)) {
+                            ErrorMessage(Format("Failed to convert texture format ('%s')", t.filePath.string()));
+                            continue;
+                        }
+                        std::swap(image, converted);
+                    }
+                }
+            }
         }
         else {
-            targetMips = t.levels;
-        }
-        targetMips = std::clamp<size_t>(targetMips, 1, maxMips);
-
-        // DirectXTex drops mips during Resize; we need to regenerate if expected
-        if (curMeta.mipLevels != targetMips && targetMips > 1) {
-            ScratchImage mipImage;
-            if (isVolume) {
-                hr = GenerateMipMaps3D(image.GetImages(), image.GetImageCount(), curMeta, TEX_FILTER_DEFAULT, targetMips, mipImage);
+            // -----------------------------------------------------------
+            // 2.2 Non-DDS source (PNG/TGA/HDR): resize/mips/format are all
+            // driven by the request, since there's no source compression
+            // or existing mip chain to preserve.
+            // -----------------------------------------------------------
+            if (t.format == -1) {
+                if (isHDR) rx3Format = RX3_TEXFORMAT_BC6;
+                else rx3Format = image.IsAlphaAllOpaque() ? RX3_TEXFORMAT_DXT1 : RX3_TEXFORMAT_DXT5;
             }
             else {
-                hr = GenerateMipMaps(image.GetImages(), image.GetImageCount(), curMeta, TEX_FILTER_DEFAULT, targetMips, mipImage);
+                rx3Format = static_cast<unsigned char>(t.format);
             }
-            if (FAILED(hr)) return false;
-            std::swap(image, mipImage);
-        }
+            if (rx3options.gameConfig.TextureFormats.count(rx3Format))
+                rx3Format = rx3options.gameConfig.TextureFormats.at(rx3Format);
 
-        // 5. Convert / Compress Format
-        auto const &mipMeta = image.GetMetadata();
-        if (mipMeta.format != targetDxgi) {
-            ScratchImage finalImage;
+            targetDxgi = MapRx3FormatToDXGI(rx3Format);
+            if (targetDxgi == DXGI_FORMAT_UNKNOWN) {
+                ErrorMessage(Format("Unsupported texture format ('%s')", t.filePath.string()));
+                continue;
+            }
+
+            // Power-of-two rule against the target format.
             if (IsCompressed(targetDxgi)) {
-                // BC6H compression takes time, TEX_COMPRESS_PARALLEL can help speed it up if supported
-                hr = Compress(image.GetImages(), image.GetImageCount(), mipMeta, targetDxgi, TEX_COMPRESS_DEFAULT, TEX_THRESHOLD_DEFAULT, finalImage);
+                if (!IsPowerOfTwo(targetW)) targetW = NextPowerOfTwo(targetW);
+                if (!IsPowerOfTwo(targetH)) targetH = NextPowerOfTwo(targetH);
+            }
+
+            // Resize if needed.
+            if (targetW != meta.width || targetH != meta.height) {
+                ScratchImage resized;
+                hr = Resize(image.GetImages(), image.GetImageCount(), meta, targetW, targetH, TEX_FILTER_DEFAULT, resized);
+                if (FAILED(hr)) {
+                    ErrorMessage(Format("Failed to resize texture ('%s')", t.filePath.string()));
+                    continue;
+                }
+                std::swap(image, resized);
+            }
+
+            // Generate mips if asked.
+            auto const &curMeta = image.GetMetadata();
+            size_t maxMips = ComputeFullMipCount(targetW, targetH, 1);
+            size_t desiredMips = 1;
+            if (t.levels == 0) {
+                // Auto: full chain for PNG/TGA, single level for HDR.
+                desiredMips = isHDR ? 1 : maxMips;
+            }
+            else if (t.levels < 0) { // sliced: N levels off the top of the full chain
+                int sliced = static_cast<int>(maxMips) + t.levels;
+                desiredMips = (sliced < 1) ? maxMips : static_cast<size_t>(sliced);
             }
             else {
-                hr = Convert(image.GetImages(), image.GetImageCount(), mipMeta, targetDxgi, TEX_FILTER_DEFAULT, TEX_THRESHOLD_DEFAULT, finalImage);
+                desiredMips = static_cast<size_t>(t.levels);
             }
-            if (FAILED(hr)) return false;
-            std::swap(image, finalImage);
+            desiredMips = std::clamp<size_t>(desiredMips, 1, maxMips);
+
+            if (desiredMips > 1 && curMeta.mipLevels != desiredMips) {
+                ScratchImage mipImage;
+                hr = GenerateMipMaps(image.GetImages(), image.GetImageCount(), curMeta, TEX_FILTER_DEFAULT, desiredMips, mipImage);
+                if (FAILED(hr)) {
+                    ErrorMessage(Format("Failed to generate texture mipmaps ('%s')", t.filePath.string()));
+                    continue;
+                }
+                std::swap(image, mipImage);
+            }
+
+            // Convert/compress to target format if needed.
+            auto const &curFormatMeta = image.GetMetadata();
+            if (curFormatMeta.format != targetDxgi) {
+                ScratchImage converted;
+                if (IsCompressed(targetDxgi))
+                    hr = Compress(image.GetImages(), image.GetImageCount(), curFormatMeta, targetDxgi, TEX_COMPRESS_DEFAULT, TEX_THRESHOLD_DEFAULT, converted);
+                else
+                    hr = Convert(image.GetImages(), image.GetImageCount(), curFormatMeta, targetDxgi, TEX_FILTER_DEFAULT, TEX_THRESHOLD_DEFAULT, converted);
+                if (FAILED(hr)) {
+                    ErrorMessage(Format("Failed to convert texture format ('%s')", t.filePath.string()));
+                    continue;
+                }
+                std::swap(image, converted);
+            }
         }
 
+        // -----------------------------------------------------------------
+        // 3. Serialize into RX3 binary format
+        // -----------------------------------------------------------------
         auto const &finMeta = image.GetMetadata();
+        size_t targetMips = finMeta.mipLevels;
 
-        // 6. Serialize into RX3 binary format
         unsigned char rx3Type = RX3_TEXTURE_2D;
         if (finMeta.dimension == TEX_DIMENSION_TEXTURE3D) rx3Type = RX3_TEXTURE_3D;
         else if (finMeta.miscFlags & TEX_MISC_TEXTURECUBE) rx3Type = RX3_TEXTURE_CUBE;
@@ -671,37 +833,83 @@ bool PackTexturesToRx3Container(std::vector<PackedTextureInfo> const &textures, 
         }
         texDataWriter.Align();
         // Overwrite size placeholder at the beginning
-        *reinterpret_cast<unsigned int *>(texData.data()) = static_cast<unsigned int>(texData.size());
+        SetAt(texData.data(), 0, texData.size());
         Rx3Writer texWriter(rx3.AddChunk(RX3_CHUNK_TEXTURE));
         texWriter.Put(texData.data(), texData.size());
     }
     // 7. Write Headers Section (Extract 16-byte headers from all populated textures)
     std::vector<Rx3Chunk *> textureChunks = rx3.FindAllChunks(RX3_CHUNK_TEXTURE);
-    Rx3Writer texHeadersWriter(rx3.FindFirstChunk(RX3_CHUNK_TEXTURE_BATCH));
+    auto textureBatch = rx3.FindFirstChunk(RX3_CHUNK_TEXTURE_BATCH);
+    if (!textureBatch)
+        textureBatch = &rx3.AddChunk(RX3_CHUNK_TEXTURE_BATCH);
+    Rx3Writer texHeadersWriter(textureBatch);
     texHeadersWriter.Put<unsigned int>(static_cast<unsigned int>(textureChunks.size()));
     texHeadersWriter.Align();
     for (auto const &chunk : textureChunks)
         texHeadersWriter.Put(chunk->mData.data(), 16);
     // 8. Write Global Names Table
-    auto &namesSection = rx3.AddChunk(RX3_CHUNK_NAME_TABLE);
-    Rx3Writer namesWriter(namesSection);
-    unsigned int namesSize = 16 + 8 * textures.size();
-    for (auto const &t : textures)
-        namesSize += t.name.length() + 1; // +1 for null terminator
-    namesWriter.Put<unsigned int>(namesSize);
-    namesWriter.Put<unsigned int>(static_cast<unsigned int>(textures.size()));
-    namesWriter.Align();
-    for (auto const &t : textures) {
-        namesWriter.Put<unsigned int>(RX3_CHUNK_TEXTURE);
-        namesWriter.Put<unsigned int>(static_cast<unsigned int>(t.name.size() + 1));
-        namesWriter.Put(t.name.c_str(), t.name.size() + 1); // Ensure null byte is pushed
+    if (!withoutNames) {
+        auto &namesSection = rx3.AddChunk(RX3_CHUNK_NAME_TABLE);
+        Rx3Writer namesWriter(namesSection);
+        namesWriter.Put<unsigned int>(0);
+        namesWriter.Put<unsigned int>(static_cast<unsigned int>(textures.size()));
+        namesWriter.Align();
+        for (auto const &t : textures) {
+            auto name = t.name;
+            // TODO: do not add the suffix for some specific containers (wipe3d, stadium)
+            if (rx3options.gameConfig.TextureRasterSuffix && !name.ends_with(".Raster"))
+                name += ".Raster";
+            namesWriter.Put<unsigned int>(RX3_CHUNK_TEXTURE);
+            namesWriter.Put<unsigned int>(static_cast<unsigned int>(name.size() + 1));
+            namesWriter.Put(name.c_str(), name.size() + 1);
+        }
+        namesWriter.Align();
+        SetAt(namesSection.mData.data(), 0, namesSection.mData.size());
     }
-    namesWriter.Align();
-    // Write names block size at the very start of its payload
-    *reinterpret_cast<unsigned int *>(namesSection.mData.data()) = static_cast<unsigned int>(namesSection.mData.size());
-    // 9. Save out to file
-    rx3.Save(rx3path);
+    // TODO: handle A8 and AL8
     return true;
+}
+
+bool ImportTexturesToRX3(Rx3Container &rx3, vector<path> const &inTextures, path const &localMetadataFile,
+    Rx3Options const &rx3options, bool withoutNames) {
+    map<string, TexFormatTarget> metadata = rx3options.texTargetFormats;
+    vector<string> order;
+    if (!localMetadataFile.empty())
+        ReadTexFormatFile(localMetadataFile, metadata, order);
+    vector<PackedTextureInfo> textures;
+    for (auto const &p : inTextures) {
+        PackedTextureInfo t;
+        t.filePath = p;
+        t.name = p.stem().string();
+        auto nameLowered = ToLower(t.name);
+        if (metadata.contains(nameLowered)) {
+            auto m = metadata[nameLowered];
+            t.format = m.format;
+            t.width = m.width;
+            t.height = m.height;
+            t.levels = m.levels;
+        }
+        textures.push_back(t);
+    }
+    std::unordered_map<std::string, size_t> orderLookup;
+    for (size_t i = 0; i < order.size(); ++i)
+        orderLookup[order[i]] = i;
+    std::stable_sort(textures.begin(), textures.end(), [&](const PackedTextureInfo &a, const PackedTextureInfo &b) {
+        auto nameA = ToLower(a.name);
+        auto nameB = ToLower(b.name);
+        auto itA = orderLookup.find(nameA);
+        auto itB = orderLookup.find(nameB);
+        bool hasA = (itA != orderLookup.end());
+        bool hasB = (itB != orderLookup.end());
+        if (hasA && hasB)
+            return itA->second < itB->second;
+        if (hasA)
+            return true;
+        if (hasB)
+            return false;
+        return false;
+    });
+    ImportTexturesToRX3(rx3, textures, rx3options, withoutNames);
 }
 
 PackedTextureInfo::PackedTextureInfo() {}

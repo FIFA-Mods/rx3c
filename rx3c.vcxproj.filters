@@ -1,27 +1,82 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClInclude Include="Rx3Container.h" />
-    <ClInclude Include="commandline.h" />
-    <ClInclude Include="Rx3Names.h" />
-    <ClInclude Include="errormsg.h" />
-    <ClInclude Include="memory.h" />
-    <ClInclude Include="rx3utils.h" />
-    <ClInclude Include="winheader.h" />
-    <ClInclude Include="Rx3Textures.h" />
-    <ClInclude Include="half.hpp" />
-    <ClInclude Include="Rx3Model.h" />
-    <ClInclude Include="Rx3Options.h" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Rx3\Rx3Container.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="Rx3\Rx3Hotspot.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="Rx3\Rx3Model.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="Rx3\Rx3Names.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="Rx3\Rx3Textures.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="utils\commandline.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="utils\errormsg.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="utils\memory.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="utils\rx3utils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="Rx3\Rx3Options.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="commandline.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="Rx3Container.cpp" />
-    <ClCompile Include="Rx3Names.cpp" />
-    <ClCompile Include="errormsg.cpp" />
-    <ClCompile Include="memory.cpp" />
-    <ClCompile Include="rx3utils.cpp" />
-    <ClCompile Include="Rx3Textures.cpp" />
-    <ClCompile Include="Rx3Model.cpp" />
+    <Filter Include="Rx3">
+      <UniqueIdentifier>{5e408a2e-c534-41a1-a2e7-ab3121c70bb8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="utils">
+      <UniqueIdentifier>{7fb3e859-0af2-45e5-b34b-ceac19a58ea3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Rx3\Rx3Container.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\Rx3Hotspot.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\Rx3Model.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\Rx3Names.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\Rx3Options.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\Rx3Textures.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\commandline.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\errormsg.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\half.hpp">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\memory.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\rx3utils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\winheader.h">
+      <Filter>utils</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

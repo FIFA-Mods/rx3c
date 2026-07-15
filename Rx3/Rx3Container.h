@@ -170,6 +170,7 @@ class Rx3Container {
 public:
     vector<Rx3Chunk> mChunks;
     string mName;
+    path mPath;
     bool mBigEndian;
 
     Rx3Container();
@@ -178,6 +179,7 @@ public:
     bool Save(path const &rx3path);
     Rx3Chunk *FindFirstChunk(uint32_t chunkId);
     vector<Rx3Chunk *> FindAllChunks(uint32_t chunkId);
+    void RemoveAllChunks(uint32_t chunkId);
     Rx3Chunk &AddChunk(uint32_t chunkId);
     bool IsEmpty();
 };

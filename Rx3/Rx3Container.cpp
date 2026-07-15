@@ -246,6 +246,12 @@ vector<Rx3Chunk *> Rx3Container::FindAllChunks(uint32_t chunkId) {
     return result;
 }
 
+void Rx3Container::RemoveAllChunks(uint32_t chunkId) {
+    mChunks.erase(std::remove_if(mChunks.begin(), mChunks.end(),
+        [chunkId](const Rx3Chunk &chunk) { return chunk.mId == chunkId; }),
+        mChunks.end());
+}
+
 Rx3Chunk &Rx3Container::AddChunk(uint32_t chunkId) {
     Rx3Chunk chunk;
     chunk.mId = chunkId;

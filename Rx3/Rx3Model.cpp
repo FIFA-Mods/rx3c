@@ -494,7 +494,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                 else if (usage == 'i') {
                     if (usageIndex <= 1) {
                         SetNumBones(obj.vertexFormat, (usageIndex + 1) * 4);
-                        if (t == dt_4u8 && (options.game == "fifa16pc" || options.game == "fifa15pc"))
+                        if (t == dt_4u8 && options.gameConfig.MaxBones > 255)
                             t = dt_4u16;
                         for (uint32_t v = 0; v < numVertices; v++) {
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
@@ -577,7 +577,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
     }
 }
 
-Model ModelFromSimpleMeshContainer(Rx3Container &rx3, path const &rx3path, Rx3Options const &options) {
+Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options) {
     using namespace helper::rx3model;
     Model model;
     auto indexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_INDEX_BUFFER);
@@ -651,7 +651,7 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, path const &rx3path, Rx3Op
                 skeletonReader.Skip(16);
                 for (uint32_t b = 0; b < numBones; b++) {
                     int16_t parentIndex = -1;
-                    if (options.game == "fifa16pc" || options.game == "fifa15pc")
+                    if (options.gameConfig.MaxBones > 255)
                         parentIndex = skeletonReader.Read<int16_t>();
                     else {
                         parentIndex = skeletonReader.Read<uint8_t>();
@@ -677,7 +677,7 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, path const &rx3path, Rx3Op
     return model;
 }
 
-Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options const &options) {
+Model ModelFromSceneContainer(Rx3Container &rx3, Rx3Options const &options) {
     using namespace helper::rx3model;
     Model model;
     auto indexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_INDEX_BUFFER);
@@ -691,6 +691,7 @@ Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options
     auto materialSections = rx3.FindAllChunks(RX3_CHUNK_MATERIAL);
     auto locationChunks = rx3.FindAllChunks(RX3_CHUNK_LOCATION);
     path crowdPath;
+    auto rx3path = rx3.mPath;
     if (rx3path.has_parent_path()) {
         auto parentDir = rx3path.parent_path();
         string filename = rx3path.stem().string();
@@ -999,12 +1000,11 @@ Model ModelFromSceneContainer(Rx3Container &rx3, path const &rx3path, Rx3Options
     return model;
 }
 
-Model ModelFromRX3(path const &rx3path, Rx3Options const &options) {
-    Rx3Container rx3(rx3path);
+Model ModelFromRX3(Rx3Container &rx3, Rx3Options const &options) {
     if (rx3.FindFirstChunk(RX3_CHUNK_SCENE_INSTANCE))
-        return ModelFromSceneContainer(rx3, rx3path, options);
+        return ModelFromSceneContainer(rx3, options);
     else if (rx3.FindFirstChunk(RX3_CHUNK_SIMPLE_MESH))
-        return ModelFromSimpleMeshContainer(rx3, rx3path, options);
+        return ModelFromSimpleMeshContainer(rx3, options);
     return Model();
 }
 
@@ -1012,4 +1012,13 @@ void ModelToRX3SimpleMesh(Model const &model, std::filesystem::path const &rx3pa
     Rx3Container rx3;
     vector<vector<unsigned char>> vbs, ibs, boneremap;
 
+}
+
+void ExtractModelFromRX3(Rx3Container &container, std::filesystem::path const &outputDir, Rx3Options const &rx3options) {
+    Model m = ModelFromRX3(container, rx3options);
+    if (!m.objects.empty() || !m.skeleton.bones.empty()) {
+        if (!exists(outputDir))
+            create_directories(outputDir);
+        m.WriteFbx(outputDir / (container.mName + ".fbx"), rx3options.modelFormat == "fbxascii");
+    }
 }

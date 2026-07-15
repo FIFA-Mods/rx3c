@@ -21,9 +21,11 @@ struct PackedTextureInfo {
 };
 
 int TexFormatNameToID(std::string const &name);
-void ReadTexFormatFile(std::filesystem::path const &filePath, std::map<std::string, TexFormatTarget> &out);
+void ReadTexFormatFile(std::filesystem::path const &filePath, std::map<std::string, TexFormatTarget> &out,
+    std::vector<std::string> &outOrder);
 
-void ExtractTexturesFromContainer(Rx3Container &container, std::filesystem::path const &outputDir, Rx3Options const &rx3options);
-void ExtractTexturesFromRX3(std::filesystem::path const &rx3path, std::filesystem::path const &outputPath, Rx3Options const &rx3options);
-bool PackTexturesToRx3Container(std::vector<PackedTextureInfo> const &textures, std::filesystem::path const &rx3path, std::map<unsigned char, unsigned char> formatConversion);
-//bool PackFolderTexturesToRx3Container(std::filesystem::path const &folderPath, std::filesystem::path const &rx3path);
+void ExtractTexturesFromRX3(Rx3Container &container, std::filesystem::path const &outputDir, Rx3Options const &rx3options);
+bool ImportTexturesToRX3(Rx3Container &rx3, std::vector<PackedTextureInfo> const &inTextures, Rx3Options const &rx3options,
+    bool withoutNames = false);
+bool ImportTexturesToRX3(Rx3Container &rx3, std::vector<std::filesystem::path> const &inTextures,
+    std::filesystem::path const &localMetadataFile, Rx3Options const &rx3options, bool withoutNames = false);
