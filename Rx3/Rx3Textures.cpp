@@ -5,7 +5,6 @@
 #include <wincodec.h>
 #include <fstream>
 #include "TextFileTable.h"
-#include "memory.h"
 
 using namespace DirectX;
 using namespace memory;
@@ -91,10 +90,10 @@ void CopyLevelIntoImage(Image const *dstImage, unsigned char const *src, unsigne
     if (!dstImage || !dstImage->pixels || !src)
         return;
     size_t const dstRows = dstImage->rowPitch ? (dstImage->slicePitch / dstImage->rowPitch) : 0;
-    size_t const rows = std::min<size_t>(srcHeight, dstRows);
-    size_t const rowBytes = std::min<size_t>(srcStride, dstImage->rowPitch);
+    size_t const rows = min<size_t>(srcHeight, dstRows);
+    size_t const rowBytes = min<size_t>(srcStride, dstImage->rowPitch);
     for (size_t row = 0; row < rows; row++) {
-        std::memcpy(dstImage->pixels + row * dstImage->rowPitch, src + row * srcStride, rowBytes);
+        memcpy(dstImage->pixels + row * dstImage->rowPitch, src + row * srcStride, rowBytes);
     }
 }
 
@@ -129,8 +128,8 @@ unsigned char CalcMaxMipLevel(unsigned short height, unsigned short width) {
     return result;
 }
 
-int TexFormatNameToID(std::string const &name) {
-    static std::map<std::string, int> texFormatNameToID = {
+int TexFormatNameToID(string const &name) {
+    static map<string, int> texFormatNameToID = {
         { "DXT1", 0 },
         { "BC1", 0 },
         { "DXT3", 1 },
@@ -163,7 +162,7 @@ int TexFormatNameToID(std::string const &name) {
     return -1;
 }
 
-void ReadTexFormatFile(std::filesystem::path const &filePath, std::map<std::string, TexFormatTarget> &out, vector<string> &outOrder) {
+void ReadTexFormatFile(path const &filePath, map<string, TexFormatTarget> &out, vector<string> &outOrder) {
     if (exists(filePath)) {
         TextFileTable texFormatsTable;
         if (texFormatsTable.ReadCSV(filePath)) {
@@ -173,7 +172,7 @@ void ReadTexFormatFile(std::filesystem::path const &filePath, std::map<std::stri
                     string name = ToLower(WtoA(row[0]));
                     Trim(name);
                     TexFormatTarget t;
-                    for (size_t c = 1; c < min(4, row.size()); c++) {
+                    for (size_t c = 1; c < min(4u, row.size()); c++) {
                         string value = ToLower(WtoA(row[c]));
                         Trim(value);
                         if (IsNumber(value, false))
@@ -210,7 +209,7 @@ void ExtractTexturesFromRX3(Rx3Container &container, path const &outputDir, Rx3O
     auto texNamesSection = container.FindFirstChunk(RX3_CHUNK_NAME_TABLE);
     vector<string> texNames;
     if (texNamesSection) {
-        auto names = ExtractNamesFromSection(texNamesSection);
+        auto names = ExtractNamesFromChunk(texNamesSection);
         for (auto const &[id, name] : names) {
             if (id == RX3_CHUNK_TEXTURE)
                 texNames.push_back(name);
@@ -286,7 +285,7 @@ void ExtractTexturesFromRX3(Rx3Container &container, path const &outputDir, Rx3O
         }
         if (isVolume) {
             for (unsigned short l = 0; l < mips; l++) {
-                unsigned short const curDepth = std::max<unsigned short>(1, static_cast<unsigned short>(depth >> l));
+                unsigned short const curDepth = max<unsigned short>(1, static_cast<unsigned short>(depth >> l));
                 for (unsigned short s = 0; s < curDepth; s++) {
                     unsigned int dataStride = reader.Read<unsigned int>();
                     unsigned int dataHeight = reader.Read<unsigned int>();
@@ -394,7 +393,7 @@ void ExtractTexturesFromRX3(Rx3Container &container, path const &outputDir, Rx3O
             int maxLevels = CalcMaxMipLevel(texInfo.width, texInfo.height);
             if (texInfo.levels < maxLevels)
                 outMetadata << "," << (texInfo.levels == 1 ? 1 : ((int)texInfo.levels - maxLevels));
-            outMetadata << std::endl;
+            outMetadata << endl;
         }
     }
 }
@@ -505,7 +504,7 @@ static bool ExtractSubMipChain(ScratchImage const &src, size_t dropLevels, Scrat
 
     if (meta.dimension == TEX_DIMENSION_TEXTURE3D) {
         for (size_t l = 0; l < newMeta.mipLevels; ++l) {
-            size_t curDepth = std::max<size_t>(1, newMeta.depth >> l);
+            size_t curDepth = max<size_t>(1, newMeta.depth >> l);
             for (size_t s = 0; s < curDepth; ++s) {
                 const Image *srcImg = src.GetImage(l + dropLevels, 0, s);
                 const Image *dstImg = dst.GetImage(l, 0, s);
@@ -550,14 +549,14 @@ constexpr unsigned int FourCC(char a, char b, char c, char d) {
 }
 
 bool WasSourceA8L8(path const &ddsPath) {
-    std::ifstream f(ddsPath, std::ios::binary);
+    ifstream f(ddsPath, ios::binary);
     if (!f)
         return false;
     char magic[4];
     f.read(magic, 4);
     if (f.gcount() != 4 || memcmp(magic, "DDS ", 4) != 0)
         return false;
-    f.seekg(72, std::ios::cur);
+    f.seekg(72, ios::cur);
     RawDDSPixelFormat pf{};
     f.read(reinterpret_cast<char *>(&pf), sizeof(pf));
     if (f.gcount() != sizeof(pf))
@@ -576,8 +575,8 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
 {
     for (auto const &t : textures) {
         auto ext = t.filePath.extension();
-        std::string extStr = ext.string();
-        std::transform(extStr.begin(), extStr.end(), extStr.begin(), ::tolower);
+        string extStr = ext.string();
+        transform(extStr.begin(), extStr.end(), extStr.begin(), ::tolower);
 
         bool isDDS = (extStr == ".dds");
         bool isHDR = (extStr == ".hdr");
@@ -643,7 +642,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                 if (dropLevel > 0) {
                     ScratchImage dropped;
                     if (ExtractSubMipChain(image, static_cast<size_t>(dropLevel), dropped)) {
-                        std::swap(image, dropped);
+                        swap(image, dropped);
                         needResize = false;
                     }
                 }
@@ -660,7 +659,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                         ErrorMessage(Format("Failed to decompress texture ('%s')", t.filePath.string()));
                         continue;
                     }
-                    std::swap(image, decompressed);
+                    swap(image, decompressed);
                 }
 
                 auto const &resizeSrcMeta = image.GetMetadata();
@@ -670,7 +669,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                     ErrorMessage(Format("Failed to resize texture ('%s')", t.filePath.string()));
                     continue;
                 }
-                std::swap(image, resized);
+                swap(image, resized);
 
                 if (originalMips > 1) {
                     auto const &postResizeMeta = image.GetMetadata();
@@ -686,7 +685,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                             ErrorMessage(Format("Failed to generate texture mipmaps ('%s')", t.filePath.string()));
                             continue;
                         }
-                        std::swap(image, mipImage);
+                        swap(image, mipImage);
                     }
                 }
 
@@ -701,7 +700,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                         ErrorMessage(Format("Failed to convert texture format ('%s')", t.filePath.string()));
                         continue;
                     }
-                    std::swap(image, converted);
+                    swap(image, converted);
                 }
             }
             else {
@@ -716,7 +715,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                             ErrorMessage(Format("Failed to decompress texture ('%s')", t.filePath.string()));
                             continue;
                         }
-                        std::swap(image, decompressed);
+                        swap(image, decompressed);
                     }
                     auto const &decompMeta = image.GetMetadata();
                     if (decompMeta.format != targetDxgi) {
@@ -729,7 +728,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                             ErrorMessage(Format("Failed to convert texture format ('%s')", t.filePath.string()));
                             continue;
                         }
-                        std::swap(image, converted);
+                        swap(image, converted);
                     }
                 }
             }
@@ -770,7 +769,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                     ErrorMessage(Format("Failed to resize texture ('%s')", t.filePath.string()));
                     continue;
                 }
-                std::swap(image, resized);
+                swap(image, resized);
             }
 
             // Generate mips if asked.
@@ -788,7 +787,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
             else {
                 desiredMips = static_cast<size_t>(t.levels);
             }
-            desiredMips = std::clamp<size_t>(desiredMips, 1, maxMips);
+            desiredMips = clamp<size_t>(desiredMips, 1, maxMips);
 
             if (desiredMips > 1 && curMeta.mipLevels != desiredMips) {
                 ScratchImage mipImage;
@@ -797,7 +796,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                     ErrorMessage(Format("Failed to generate texture mipmaps ('%s')", t.filePath.string()));
                     continue;
                 }
-                std::swap(image, mipImage);
+                swap(image, mipImage);
             }
 
             // Convert/compress to target format if needed.
@@ -812,7 +811,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                     ErrorMessage(Format("Failed to convert texture format ('%s')", t.filePath.string()));
                     continue;
                 }
-                std::swap(image, converted);
+                swap(image, converted);
             }
         }
 
@@ -827,7 +826,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
         else if (finMeta.miscFlags & TEX_MISC_TEXTURECUBE) rx3Type = RX3_TEXTURE_CUBE;
         else if (finMeta.arraySize > 1) rx3Type = RX3_TEXTURE_ARRAY;
 
-        std::vector<unsigned char> texData;
+        vector<unsigned char> texData;
         Rx3Writer texDataWriter(texData);
 
         // Write 16-byte Header
@@ -844,7 +843,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
         // Write Texture Data Mip-by-Mip
         if (rx3Type == RX3_TEXTURE_3D) {
             for (size_t l = 0; l < targetMips; ++l) {
-                size_t curDepth = std::max<size_t>(1, finMeta.depth >> l);
+                size_t curDepth = max<size_t>(1, finMeta.depth >> l);
                 for (size_t s = 0; s < curDepth; ++s) {
                     const Image *img = image.GetImage(l, 0, s);
                     size_t rowPitch, slicePitch;
@@ -866,7 +865,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                     size_t rowPitch, slicePitch;
                     ComputePitch(finMeta.format, img->width, img->height, rowPitch, slicePitch, CP_FLAGS_NONE);
                     // Fallback to manual height calc if ComputePitch acts strange for block compression on tiny mips
-                    size_t dataHeight = IsCompressed(finMeta.format) ? std::max<size_t>(1, (img->height + 3) / 4) : img->height;
+                    size_t dataHeight = IsCompressed(finMeta.format) ? max<size_t>(1, (img->height + 3) / 4) : img->height;
                     texDataWriter.Put<unsigned int>(static_cast<unsigned int>(rowPitch));
                     texDataWriter.Put<unsigned int>(static_cast<unsigned int>(dataHeight));
                     texDataWriter.Put<unsigned int>(static_cast<unsigned int>(slicePitch));
@@ -882,7 +881,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
         texWriter.Put(texData.data(), texData.size());
     }
     // 7. Write Headers Section (Extract 16-byte headers from all populated textures)
-    std::vector<Rx3Chunk *> textureChunks = rx3.FindAllChunks(RX3_CHUNK_TEXTURE);
+    vector<Rx3Chunk *> textureChunks = rx3.FindAllChunks(RX3_CHUNK_TEXTURE);
     auto textureBatch = rx3.FindFirstChunk(RX3_CHUNK_TEXTURE_BATCH);
     if (!textureBatch)
         textureBatch = &rx3.AddChunk(RX3_CHUNK_TEXTURE_BATCH);
@@ -935,10 +934,10 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<path> const &inTextures, path
         }
         textures.push_back(t);
     }
-    std::unordered_map<std::string, size_t> orderLookup;
+    unordered_map<string, size_t> orderLookup;
     for (size_t i = 0; i < order.size(); ++i)
         orderLookup[order[i]] = i;
-    std::stable_sort(textures.begin(), textures.end(), [&](const PackedTextureInfo &a, const PackedTextureInfo &b) {
+    stable_sort(textures.begin(), textures.end(), [&](const PackedTextureInfo &a, const PackedTextureInfo &b) {
         auto nameA = ToLower(a.name);
         auto nameB = ToLower(b.name);
         auto itA = orderLookup.find(nameA);
@@ -958,30 +957,30 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<path> const &inTextures, path
 
 PackedTextureInfo::PackedTextureInfo() {}
 
-PackedTextureInfo::PackedTextureInfo(std::filesystem::path const &_filePath) {
+PackedTextureInfo::PackedTextureInfo(path const &_filePath) {
     name = _filePath.stem().string();
     filePath = _filePath;
 }
 
-PackedTextureInfo::PackedTextureInfo(std::string const &_name, std::filesystem::path const &_filePath) {
+PackedTextureInfo::PackedTextureInfo(string const &_name, path const &_filePath) {
     name = _name;
     filePath = _filePath;
 }
 
-PackedTextureInfo::PackedTextureInfo(std::string const &_name, std::filesystem::path const &_filePath, char _format) {
+PackedTextureInfo::PackedTextureInfo(string const &_name, path const &_filePath, int _format) {
     name = _name;
     filePath = _filePath;
     format = _format;
 }
 
-PackedTextureInfo::PackedTextureInfo(std::string const &_name, std::filesystem::path const &_filePath, char _format, char _levels) {
+PackedTextureInfo::PackedTextureInfo(string const &_name, path const &_filePath, int _format, char _levels) {
     name = _name;
     filePath = _filePath;
     format = _format;
     levels = _levels;
 }
 
-PackedTextureInfo::PackedTextureInfo(std::string const &_name, std::filesystem::path const &_filePath, char _format, char _levels, unsigned short _width, unsigned short _height) {
+PackedTextureInfo::PackedTextureInfo(string const &_name, path const &_filePath, int _format, char _levels, unsigned short _width, unsigned short _height) {
     name = _name;
     filePath = _filePath;
     format = _format;

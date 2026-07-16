@@ -1,8 +1,8 @@
 #include "Rx3Options.h"
 #include "Rx3Container.h"
 
-std::map<std::string, GameConfig> &GameConfigs() {
-    static std::map<std::string, GameConfig> configs = {
+map<string, GameConfig> &GameConfigs() {
+    static map<string, GameConfig> configs = {
         { "fifa12pc", GameConfig(
             true,  // BigEndian
             4,     // BonesPerVertex
@@ -124,7 +124,9 @@ std::map<std::string, GameConfig> &GameConfigs() {
 
 GameConfig::GameConfig() {}
 
-GameConfig::GameConfig(bool _BigEndian, unsigned char _BonesPerVertex, unsigned int _MaxBones, bool _TextureRasterSuffix, bool _QuadMeshes, bool _StadiumTexturesAndModelInOneContainer, std::map<unsigned char, unsigned char> const &_TextureFormats) {
+GameConfig::GameConfig(bool _BigEndian, unsigned char _BonesPerVertex, unsigned int _MaxBones, bool _TextureRasterSuffix,
+    bool _QuadMeshes, bool _StadiumTexturesAndModelInOneContainer, map<unsigned char, unsigned char> const &_TextureFormats)
+{
     BigEndian = _BigEndian;
     BonesPerVertex = _BonesPerVertex;
     MaxBones = _MaxBones;

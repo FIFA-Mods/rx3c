@@ -23,13 +23,13 @@
     <ClCompile Include="utils\errormsg.cpp">
       <Filter>utils</Filter>
     </ClCompile>
-    <ClCompile Include="utils\memory.cpp">
-      <Filter>utils</Filter>
-    </ClCompile>
     <ClCompile Include="utils\rx3utils.cpp">
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="Rx3\Rx3Options.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="Rx3\Rx3Scene.cpp">
       <Filter>Rx3</Filter>
     </ClCompile>
   </ItemGroup>
@@ -69,14 +69,11 @@
     <ClInclude Include="utils\half.hpp">
       <Filter>utils</Filter>
     </ClInclude>
-    <ClInclude Include="utils\memory.h">
-      <Filter>utils</Filter>
-    </ClInclude>
     <ClInclude Include="utils\rx3utils.h">
       <Filter>utils</Filter>
     </ClInclude>
-    <ClInclude Include="utils\winheader.h">
-      <Filter>utils</Filter>
+    <ClInclude Include="Rx3\Rx3Scene.h">
+      <Filter>Rx3</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

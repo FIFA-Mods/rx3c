@@ -62,10 +62,10 @@
     <ClCompile Include="Rx3\Rx3Model.cpp" />
     <ClCompile Include="Rx3\Rx3Names.cpp" />
     <ClCompile Include="Rx3\Rx3Options.cpp" />
+    <ClCompile Include="Rx3\Rx3Scene.cpp" />
     <ClCompile Include="Rx3\Rx3Textures.cpp" />
     <ClCompile Include="utils\commandline.cpp" />
     <ClCompile Include="utils\errormsg.cpp" />
-    <ClCompile Include="utils\memory.cpp" />
     <ClCompile Include="utils\rx3utils.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -74,13 +74,12 @@
     <ClInclude Include="Rx3\Rx3Model.h" />
     <ClInclude Include="Rx3\Rx3Names.h" />
     <ClInclude Include="Rx3\Rx3Options.h" />
+    <ClInclude Include="Rx3\Rx3Scene.h" />
     <ClInclude Include="Rx3\Rx3Textures.h" />
     <ClInclude Include="utils\commandline.h" />
     <ClInclude Include="utils\errormsg.h" />
     <ClInclude Include="utils\half.hpp" />
-    <ClInclude Include="utils\memory.h" />
     <ClInclude Include="utils\rx3utils.h" />
-    <ClInclude Include="utils\winheader.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

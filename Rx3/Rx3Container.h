@@ -1,10 +1,5 @@
 #pragma once
-#include <string>
-#include <vector>
-#include <filesystem>
-
-using namespace std;
-using namespace std::filesystem;
+#include "rx3utils.h"
 
 template<typename T> void Rx3SwapEndian(T &value) {}
 void Rx3SwapEndian(uint32_t &value);

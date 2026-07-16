@@ -1,11 +1,9 @@
 #include "Rx3Names.h"
 #include "errormsg.h"
 
-using namespace std;
-
-vector<pair<unsigned int, string>> ExtractNamesFromSection(Rx3Chunk const *namesSection) {
+vector<pair<unsigned int, string>> ExtractNamesFromChunk(Rx3Chunk const *namesChunk) {
     vector<pair<unsigned int, string>> result;
-    Rx3Reader reader(namesSection);
+    Rx3Reader reader(namesChunk);
     reader.Skip(4);
     unsigned int numNames = reader.Read<unsigned int>();
     reader.Skip(8);

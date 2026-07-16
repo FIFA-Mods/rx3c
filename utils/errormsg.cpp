@@ -6,10 +6,10 @@ void SetErrorDisplayType(ErrorDisplayType type) {
     displayType = type;
 }
 
-bool ErrorMessage(std::string const &msg) {
+bool ErrorMessage(string const &msg) {
     if (displayType == ErrorDisplayType::ERR_MESSAGE_BOX)
         Error(msg.c_str());
     else if (displayType == ErrorDisplayType::ERR_CONSOLE)
-        std::cout << msg << std::endl;
+        cout << msg << endl;
     return false;
 }

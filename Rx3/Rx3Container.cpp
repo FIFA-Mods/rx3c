@@ -1,28 +1,6 @@
 #include "Rx3Container.h"
 
-template<typename T>
-T *At(void *object, size_t offset) {
-    return (T *)((size_t)object + offset);
-}
-
-template<typename T>
-T GetAt(void *object, size_t offset) {
-    return *At<T>(object, offset);
-}
-
-template<typename T>
-void SetAt(void *object, size_t offset, T const &value) {
-    *At<T>(object, offset) = value;
-}
-
-size_t GetNumBytesToAlign(size_t offset, size_t alignment) {
-    size_t m = offset % alignment;
-    return (m > 0) ? (alignment - m) : 0;
-}
-
-size_t GetAligned(size_t offset, size_t alignment) {
-    return offset + GetNumBytesToAlign(offset, alignment);
-}
+using namespace memory;
 
 void Rx3SwapEndian(uint32_t &value) {
     value = _byteswap_ulong(value);
@@ -109,12 +87,12 @@ void Rx3Writer::Put(wchar_t const *str) {
     Put<wchar_t>('\0');
 }
 
-void Rx3Writer::Put(std::string const &str) {
+void Rx3Writer::Put(string const &str) {
     PutData((void *)str.c_str(), str.size());
     Put<char>('\0');
 }
 
-void Rx3Writer::Put(std::wstring const &str) {
+void Rx3Writer::Put(wstring const &str) {
     PutData((void *)str.c_str(), str.size() * 2);
     Put<wchar_t>(L'\0');
 }
@@ -247,7 +225,7 @@ vector<Rx3Chunk *> Rx3Container::FindAllChunks(uint32_t chunkId) {
 }
 
 void Rx3Container::RemoveAllChunks(uint32_t chunkId) {
-    mChunks.erase(std::remove_if(mChunks.begin(), mChunks.end(),
+    mChunks.erase(remove_if(mChunks.begin(), mChunks.end(),
         [chunkId](const Rx3Chunk &chunk) { return chunk.mId == chunkId; }),
         mChunks.end());
 }

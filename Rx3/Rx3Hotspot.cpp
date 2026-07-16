@@ -7,7 +7,7 @@
 using namespace memory;
 using json = nlohmann::ordered_json;
 
-void ExtractHotspotFromRX3(Rx3Container &container, std::filesystem::path const &outputDir, Rx3Options const &rx3options) {
+void ExtractHotspotFromRX3(Rx3Container &container, path const &outputDir, Rx3Options const &rx3options) {
     auto hotspotChunk = container.FindFirstChunk(RX3_CHUNK_HOTSPOT);
     if (hotspotChunk) {
         Rx3Reader hotspotReader(hotspotChunk);
@@ -47,9 +47,9 @@ void ExtractHotspotFromRX3(Rx3Container &container, std::filesystem::path const 
                         {"Z", h.bounds[2]},
                         {"W", h.bounds[3]}
                     };
-                    arr.push_back(std::move(entry));
+                    arr.push_back(move(entry));
                 }
-                j["Hotspots"] = std::move(arr);
+                j["Hotspots"] = move(arr);
             }
             ofstream outHotspot(outputDir / (container.mName + ".hotspot"));
             outHotspot << j.dump(2);
@@ -57,10 +57,10 @@ void ExtractHotspotFromRX3(Rx3Container &container, std::filesystem::path const 
     }
 }
 
-void ImportHotspotToRX3(Rx3Container &container, std::filesystem::path const &hotspotFile, Rx3Options const &rx3options) {
+void ImportHotspotToRX3(Rx3Container &container, path const &hotspotFile, Rx3Options const &rx3options) {
     if (hotspotFile.empty() || !exists(hotspotFile))
         return;
-    std::ifstream inHotspot(hotspotFile);
+    ifstream inHotspot(hotspotFile);
     if (!inHotspot.is_open())
         return;
     json root;
@@ -95,16 +95,16 @@ void ImportHotspotToRX3(Rx3Container &container, std::filesystem::path const &ho
             auto [it, inserted] = groupLookup.try_emplace(groupName, groups.size());
             if (inserted)
                 groups.push_back(HotspotGroupData{ groupName, {} });
-            groups[it->second].hotspots.push_back(std::move(entry));
+            groups[it->second].hotspots.push_back(move(entry));
         }
     }
     if (groups.size() > 255) {
-        //throw std::runtime_error("Too many hotspot groups (max 255): " + hotspotFile.string());
+        //throw runtime_error("Too many hotspot groups (max 255): " + hotspotFile.string());
         groups.resize(255);
     }
     for (auto &g : groups) {
         if (g.hotspots.size() > 255) {
-            //throw std::runtime_error("Too many hotspots in group \"" + g.name + "\" (max 255): " + hotspotFile.string());
+            //throw runtime_error("Too many hotspots in group \"" + g.name + "\" (max 255): " + hotspotFile.string());
             g.hotspots.resize(255);
         }
     }

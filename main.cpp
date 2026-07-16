@@ -5,8 +5,6 @@
 #include "Rx3Textures.h"
 #include "Rx3Hotspot.h"
 #include "TextFileTable.h"
-#include <string>
-#include <windows.h>
 #include <shobjidl.h>
 
 const char *RX3C_VERSION = "0.200";
@@ -162,7 +160,7 @@ int wmain(int argc, wchar_t *argv[]) {
         vector<path> inTextures;
         vector<path> inModels;
         path inHotspot, inMetadata;
-        std::map<wstring, vector<path>> textureGroups;
+        map<wstring, vector<path>> textureGroups;
         vector<path> tempHotspots, tempMetadata;
         for (auto const &file : inFiles) {
             wstring ext = ToLower(file.extension().wstring());
@@ -201,7 +199,7 @@ int wmain(int argc, wchar_t *argv[]) {
         if (!rx3options.textureFormat.empty()) {
             wstring prefExt = L"." + AtoW(rx3options.textureFormat);
             prefExt = ToLower(prefExt);
-            auto it = std::find(extPriority.begin(), extPriority.end(), prefExt);
+            auto it = find(extPriority.begin(), extPriority.end(), prefExt);
             if (it != extPriority.end())
                 extPriority.erase(it);
             extPriority.insert(extPriority.begin(), prefExt);
@@ -214,8 +212,8 @@ int wmain(int argc, wchar_t *argv[]) {
                 size_t bestRank = extPriority.size() + 1;
                 for (auto const &file : groupFiles) {
                     wstring ext = ToLower(file.extension().wstring());
-                    auto it = std::find(extPriority.begin(), extPriority.end(), ext);
-                    size_t rank = (it != extPriority.end()) ? std::distance(extPriority.begin(), it) : extPriority.size();
+                    auto it = find(extPriority.begin(), extPriority.end(), ext);
+                    size_t rank = (it != extPriority.end()) ? distance(extPriority.begin(), it) : extPriority.size();
                     if (rank < bestRank) {
                         bestRank = rank;
                         bestFile = file;

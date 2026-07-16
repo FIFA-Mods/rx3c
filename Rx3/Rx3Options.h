@@ -1,7 +1,5 @@
 #pragma once
-#include <string>
-#include <filesystem>
-#include <map>
+#include "rx3utils.h"
 
 enum eFolderOption {
     FOLDER_OPTION_AUTO,
@@ -23,22 +21,22 @@ struct GameConfig {
     bool TextureRasterSuffix = false;
     bool QuadMeshes = false;
     bool StadiumTexturesAndModelInOneContainer = false;
-    std::map<unsigned char, unsigned char> TextureFormats;
+    map<unsigned char, unsigned char> TextureFormats;
 
     GameConfig();
     GameConfig(bool _BigEndian, unsigned char _BonesPerVertex, unsigned int _MaxBones, bool _TextureRasterSuffix,
         bool _QuadMeshes, bool _StadiumTexturesAndModelInOneContainer,
-        std::map<unsigned char, unsigned char> const &_TextureFormats);
+        map<unsigned char, unsigned char> const &_TextureFormats);
 };
 
-std::map<std::string, GameConfig> &GameConfigs();
+map<string, GameConfig> &GameConfigs();
 
 struct Rx3Options {
-    std::string game;
-    std::string textureFormat;
-    std::string modelFormat;
-    std::filesystem::path skeletonPath;
-    std::map<std::string, TexFormatTarget> texTargetFormats;
+    string game;
+    string textureFormat;
+    string modelFormat;
+    path skeletonPath;
+    map<string, TexFormatTarget> texTargetFormats;
     bool exportQuads = false;
     bool writeHDR = true;
     bool writeTexMetadata = true;

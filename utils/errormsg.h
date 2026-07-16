@@ -1,7 +1,5 @@
 #pragma once
-#include <string>
 #include "rx3utils.h"
-#include <iostream>
 
 enum ErrorDisplayType {
     ERR_MESSAGE_BOX,
@@ -12,4 +10,4 @@ enum ErrorDisplayType {
 extern ErrorDisplayType displayType;
 
 void SetErrorDisplayType(ErrorDisplayType type);
-bool ErrorMessage(std::string const &msg);
+bool ErrorMessage(string const &msg);

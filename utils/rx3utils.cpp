@@ -1,96 +1,95 @@
-﻿#include "winheader.h"
-#include "rx3utils.h"
+﻿#include "rx3utils.h"
 
 unsigned int FormattingUtils::currentBuf = 0;
 char FormattingUtils::buf[FormattingUtils::BUF_SIZE][4096];
 unsigned int FormattingUtils::currentBufW = 0;
 wchar_t FormattingUtils::bufW[FormattingUtils::BUF_SIZE][4096];
 
-std::wstring AtoW(std::string const &str) {
-    std::wstring result;
+wstring AtoW(string const &str) {
+    wstring result;
     result.resize(str.size());
     for (unsigned int i = 0; i < str.size(); i++)
         result[i] = static_cast<wchar_t>(static_cast<unsigned char>(str[i]));
     return result;
 }
 
-std::string WtoA(std::wstring const &str) {
-    std::string result;
+string WtoA(wstring const &str) {
+    string result;
     result.resize(str.size());
     for (unsigned int i = 0; i < str.size(); i++)
         result[i] = static_cast<char>(static_cast<unsigned char>(str[i]));
     return result;
 }
 
-std::string ToUpper(std::string const &str) {
-    std::string result;
+string ToUpper(string const &str) {
+    string result;
     for (size_t i = 0; i < str.length(); i++)
         result += toupper(static_cast<unsigned char>(str[i]));
     return result;
 }
 
-std::string ToLower(std::string const &str) {
-    std::string result;
+string ToLower(string const &str) {
+    string result;
     for (size_t i = 0; i < str.length(); i++)
         result += tolower(static_cast<unsigned char>(str[i]));
     return result;
 }
 
-std::wstring ToUpper(std::wstring const &str) {
-    std::wstring result;
+wstring ToUpper(wstring const &str) {
+    wstring result;
     for (size_t i = 0; i < str.length(); i++)
         result += toupper(static_cast<unsigned short>(str[i]));
     return result;
 }
 
-std::wstring ToLower(std::wstring const &str) {
-    std::wstring result;
+wstring ToLower(wstring const &str) {
+    wstring result;
     for (size_t i = 0; i < str.length(); i++)
         result += tolower(static_cast<unsigned short>(str[i]));
     return result;
 }
 
-void Replace(std::string &str, const std::string &from, const std::string &to) {
+void Replace(string &str, const string &from, const string &to) {
     if (from.empty())
         return;
     size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+    while ((start_pos = str.find(from, start_pos)) != string::npos) {
         str.replace(start_pos, from.length(), to);
         start_pos += to.length();
     }
 }
 
-void Replace(std::wstring &str, const std::wstring &from, const std::wstring &to) {
+void Replace(wstring &str, const wstring &from, const wstring &to) {
     if (from.empty())
         return;
     size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::wstring::npos) {
+    while ((start_pos = str.find(from, start_pos)) != wstring::npos) {
         str.replace(start_pos, from.length(), to);
         start_pos += to.length();
     }
 }
 
-void Trim(std::string &str) {
+void Trim(string &str) {
     size_t start = str.find_first_not_of(" \t\r\n");
-    if (start != std::string::npos)
+    if (start != string::npos)
         str = str.substr(start);
     size_t end = str.find_last_not_of(" \t\r\n");
-    if (end != std::string::npos)
+    if (end != string::npos)
         str = str.substr(0, end + 1);
 }
 
-void Trim(std::wstring &str) {
+void Trim(wstring &str) {
     size_t start = str.find_first_not_of(L" \t\r\n");
-    if (start != std::wstring::npos)
+    if (start != wstring::npos)
         str = str.substr(start);
     size_t end = str.find_last_not_of(L" \t\r\n");
-    if (end != std::wstring::npos)
+    if (end != wstring::npos)
         str = str.substr(0, end + 1);
 }
 
-std::vector<std::string> Split(std::string const &line, char delim, bool trim, bool skipEmpty, bool quotesHavePriority) {
-    std::vector<std::string> result;
-    std::string currStr;
+vector<string> Split(string const &line, char delim, bool trim, bool skipEmpty, bool quotesHavePriority) {
+    vector<string> result;
+    string currStr;
     auto AddStr = [&, trim, skipEmpty]() {
         if (trim)
             Trim(currStr);
@@ -122,9 +121,9 @@ std::vector<std::string> Split(std::string const &line, char delim, bool trim, b
     return result;
 }
 
-std::vector<std::wstring> Split(std::wstring const &line, wchar_t delim, bool trim, bool skipEmpty, bool quotesHavePriority) {
-    std::vector<std::wstring> result;
-    std::wstring currStr;
+vector<wstring> Split(wstring const &line, wchar_t delim, bool trim, bool skipEmpty, bool quotesHavePriority) {
+    vector<wstring> result;
+    wstring currStr;
     auto AddStr = [&, trim, skipEmpty]() {
         if (trim)
             Trim(currStr);
@@ -156,7 +155,7 @@ std::vector<std::wstring> Split(std::wstring const &line, wchar_t delim, bool tr
     return result;
 }
 
-unsigned int Hash(std::string const &str) {
+unsigned int Hash(string const &str) {
     unsigned int hash = 0;
     for (auto const &c : str) {
         hash += c;
@@ -201,44 +200,44 @@ wchar_t *FormattingUtils::GetBufW() {
     return result;
 }
 
-float SafeConvertFloat(std::wstring const &str) {
+float SafeConvertFloat(wstring const &str) {
     float result = 0.0f;
     try {
-        result = std::stof(str);
+        result = stof(str);
     }
     catch (...) {}
     return result;
 }
 
-float SafeConvertFloat(std::string const &str) {
+float SafeConvertFloat(string const &str) {
     float result = 0.0f;
     try {
-        result = std::stof(str);
+        result = stof(str);
     }
     catch (...) {}
     return result;
 }
 
-double SafeConvertDouble(std::wstring const &str) {
+double SafeConvertDouble(wstring const &str) {
     double result = 0.0;
     try {
-        result = std::stod(str);
+        result = stod(str);
     }
     catch (...) {}
     return result;
 }
 
-double SafeConvertDouble(std::string const &str) {
+double SafeConvertDouble(string const &str) {
     double result = 0.0;
     try {
-        result = std::stod(str);
+        result = stod(str);
     }
     catch (...) {}
     return result;
 }
 
-std::wstring GetStringWithoutUnicodeChars(std::wstring const &src) {
-    std::wstring str = src;
+wstring GetStringWithoutUnicodeChars(wstring const &src) {
+    wstring str = src;
     for (size_t i = 0; i < str.length(); i++) {
         if (str[i] == L'ð')
             str[i] = L'o';
@@ -263,8 +262,8 @@ std::wstring GetStringWithoutUnicodeChars(std::wstring const &src) {
     return str;
 }
 
-std::vector<std::wstring> FileToLinesW(std::filesystem::path const &filePath, std::wstring const &commentLineBegin) {
-    std::vector<std::wstring> lines;
+vector<wstring> FileToLinesW(path const &filePath, wstring const &commentLineBegin) {
+    vector<wstring> lines;
     FILE *file = _wfopen(filePath.c_str(), L"rb");
     if (file) {
         fseek(file, 0, SEEK_END);
@@ -338,7 +337,7 @@ std::vector<std::wstring> FileToLinesW(std::filesystem::path const &filePath, st
                 data[i] = (data[i] >> 8) | (data[i] << 8);
         }
 
-        std::wstring currentLine;
+        wstring currentLine;
         bool inComment = false;
         for (long i = 0; i < numWideChars; i++) {
             if (data[i] == L'\n') {
@@ -378,8 +377,8 @@ std::vector<std::wstring> FileToLinesW(std::filesystem::path const &filePath, st
     return lines;
 }
 
-std::vector<std::string> FileToLinesA(std::filesystem::path const &filePath, std::string const &commentLineBegin) {
-    std::vector<std::string> lines;
+vector<string> FileToLinesA(path const &filePath, string const &commentLineBegin) {
+    vector<string> lines;
     FILE *file = _wfopen(filePath.c_str(), L"rb");
     if (file) {
         fseek(file, 0, SEEK_END);
@@ -450,7 +449,7 @@ std::vector<std::string> FileToLinesA(std::filesystem::path const &filePath, std
         }
         delete[] fileData;
 
-        std::string currentLine;
+        string currentLine;
         bool inComment = false;
         for (long i = 0; i < numChars; i++) {
             if (data[i] == '\n') {
@@ -490,11 +489,11 @@ std::vector<std::string> FileToLinesA(std::filesystem::path const &filePath, std
     return lines;
 }
 
-bool StartsWith(std::wstring const &str, std::wstring const &what) {
+bool StartsWith(wstring const &str, wstring const &what) {
     return !str.compare(0, what.size(), what);
 }
 
-bool StartsWith(std::string const &str, std::string const &what) {
+bool StartsWith(string const &str, string const &what) {
     return !str.compare(0, what.size(), what);
 }
 
@@ -506,10 +505,10 @@ bool IsHexadecimalLetter(char c) {
     return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
-bool IsNumber(std::wstring const &str, bool hexadecimal) {
+bool IsNumber(wstring const &str, bool hexadecimal) {
     if (str.empty())
         return false;
-    std::wstring cmpStr;
+    wstring cmpStr;
     if (hexadecimal && (StartsWith(str, L"0x") || StartsWith(str, L"0X")))
         cmpStr = str.substr(2);
     else
@@ -524,10 +523,10 @@ bool IsNumber(std::wstring const &str, bool hexadecimal) {
     return true;
 }
 
-bool IsNumber(std::string const &str, bool hexadecimal) {
+bool IsNumber(string const &str, bool hexadecimal) {
     if (str.empty())
         return false;
-    std::string cmpStr;
+    string cmpStr;
     if (hexadecimal && (StartsWith(str, "0x") || StartsWith(str, "0X")))
         cmpStr = str.substr(2);
     else
@@ -540,4 +539,27 @@ bool IsNumber(std::string const &str, bool hexadecimal) {
         return false;
     }
     return true;
+}
+
+namespace memory {
+size_t GetNumBytesToAlign(size_t offset, size_t alignment) {
+    size_t m = offset % alignment;
+    return (m > 0) ? (alignment - m) : 0;
+}
+
+size_t GetAligned(size_t offset, size_t alignment) {
+    return offset + GetNumBytesToAlign(offset, alignment);
+}
+
+void Memory_Fill(void *dst, int val, size_t size) {
+    memset(dst, val, size);
+}
+
+void Memory_Zero(void *dst, size_t size) {
+    Memory_Fill(dst, 0, size);
+}
+
+void Memory_Copy(void *dst, void const *src, size_t size) {
+    memcpy(dst, src, size);
+}
 }
