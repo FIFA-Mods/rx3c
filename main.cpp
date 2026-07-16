@@ -163,13 +163,15 @@ int wmain(int argc, wchar_t *argv[]) {
         vector<path> inModels;
         path inHotspot, inMetadata;
         std::map<wstring, vector<path>> textureGroups;
-        vector<path> tempHotspots;
+        vector<path> tempHotspots, tempMetadata;
         for (auto const &file : inFiles) {
             wstring ext = ToLower(file.extension().wstring());
             if (ext == L".fbx")
                 inModels.push_back(file);
             else if (ext == L".hotspot")
                 tempHotspots.push_back(file);
+            else if (ext == L".csv")
+                tempMetadata.push_back(file);
             else if (ext == L".dds" || ext == L".png" || ext == L".tga" || ext == L".hdr") {
                 path groupKey = file.parent_path() / ToLower(file.stem().wstring());
                 textureGroups[groupKey.wstring()].push_back(file);
@@ -180,6 +182,17 @@ int wmain(int argc, wchar_t *argv[]) {
             for (auto const &hs : tempHotspots) {
                 if (ToLower(hs.stem().wstring()) == ToLower(rx3DefaultName)) {
                     inHotspot = hs;
+                    break;
+                }
+            }
+        }
+        if (!tempMetadata.empty()) {
+            inMetadata = tempMetadata.front();
+            for (auto const &m : tempMetadata) {
+                if (ToLower(m.stem().wstring()) == ToLower(rx3DefaultName) ||
+                    ToLower(m.stem().wstring()) == ToLower(rx3DefaultName + L"_metadata"))
+                {
+                    inMetadata = m;
                     break;
                 }
             }

@@ -130,7 +130,7 @@ unsigned char CalcMaxMipLevel(unsigned short height, unsigned short width) {
 }
 
 int TexFormatNameToID(std::string const &name) {
-    static std::map<std::string, char> texFormatNameToID = {
+    static std::map<std::string, int> texFormatNameToID = {
         { "DXT1", 0 },
         { "BC1", 0 },
         { "DXT3", 1 },
@@ -152,7 +152,7 @@ int TexFormatNameToID(std::string const &name) {
         { "A4R4G4B4", 9 },
         { "BC6", 10 },
         { "BC6H", 10 },
-        { "BC6uf", 10 },
+        { "BC6UF", 10 },
         { "BC7", 11 },
         { "BC4", 12 },
         { "ATI1", 12 }
@@ -171,9 +171,11 @@ void ReadTexFormatFile(std::filesystem::path const &filePath, std::map<std::stri
                 auto const &row = texFormatsTable.Row(r);
                 if (row.size() >= 2 && !row[0].empty()) {
                     string name = ToLower(WtoA(row[0]));
+                    Trim(name);
                     TexFormatTarget t;
                     for (size_t c = 1; c < min(4, row.size()); c++) {
                         string value = ToLower(WtoA(row[c]));
+                        Trim(value);
                         if (IsNumber(value, false))
                             t.levels = SafeConvertInt<char>(row[2]);
                         else {
@@ -228,7 +230,7 @@ void ExtractTexturesFromRX3(Rx3Container &container, path const &outputDir, Rx3O
             texName = texNames[i];
         else
             texName = "unnamed_" + to_string(i);
-        if (rx3options.gameConfig.TextureRasterSuffix && texName.ends_with(".Raster"))
+        if (texName.ends_with(".Raster"))
             texName = texName.substr(0, texName.length() - 7);
         Rx3Reader reader(textureSections[i]);
         unsigned int totalSize = reader.Read<unsigned int>();
@@ -525,6 +527,46 @@ static bool ExtractSubMipChain(ScratchImage const &src, size_t dropLevels, Scrat
     return true;
 }
 
+struct RawDDSPixelFormat {
+    unsigned int size;
+    unsigned int flags;
+    unsigned int fourCC;
+    unsigned int rgbBitCount;
+    unsigned int rBitMask;
+    unsigned int gBitMask;
+    unsigned int bBitMask;
+    unsigned int aBitMask;
+};
+
+enum : unsigned int {
+    DDPF_ALPHAPIXELS = 0x1,
+    DDPF_FOURCC = 0x4,
+    DDPF_LUMINANCE = 0x20000,
+};
+
+constexpr unsigned int FourCC(char a, char b, char c, char d) {
+    return (unsigned int)(unsigned char)a | ((unsigned int)(unsigned char)b << 8) |
+        ((unsigned int)(unsigned char)c << 16) | ((unsigned int)(unsigned char)d << 24);
+}
+
+bool WasSourceA8L8(path const &ddsPath) {
+    std::ifstream f(ddsPath, std::ios::binary);
+    if (!f)
+        return false;
+    char magic[4];
+    f.read(magic, 4);
+    if (f.gcount() != 4 || memcmp(magic, "DDS ", 4) != 0)
+        return false;
+    f.seekg(72, std::ios::cur);
+    RawDDSPixelFormat pf{};
+    f.read(reinterpret_cast<char *>(&pf), sizeof(pf));
+    if (f.gcount() != sizeof(pf))
+        return false;
+    if ((pf.flags & DDPF_FOURCC) && pf.fourCC == FourCC('D', 'X', '1', '0'))
+        return false;
+    return (pf.flags & DDPF_LUMINANCE) && (pf.flags & DDPF_ALPHAPIXELS) && pf.rgbBitCount == 16;
+}
+
 // ---------------------------------------------------------------------------
 // Main routine
 // ---------------------------------------------------------------------------
@@ -547,7 +589,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
 
         // 1. Load Image Data
         if (isDDS) hr = LoadFromDDSFile(t.filePath.c_str(), DDS_FLAGS_NONE, nullptr, image);
-        else if (isPNG) hr = LoadFromWICFile(t.filePath.c_str(), WIC_FLAGS_NONE, nullptr, image);
+        else if (isPNG) hr = LoadFromWICFile(t.filePath.c_str(), WIC_FLAGS_IGNORE_SRGB, nullptr, image);
         else if (isTGA) hr = LoadFromTGAFile(t.filePath.c_str(), TGA_FLAGS_NONE, nullptr, image);
         else if (isHDR) hr = LoadFromHDRFile(t.filePath.c_str(), nullptr, image);
         else continue; // Unsupported extension
@@ -570,6 +612,8 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
             // 2.1 DDS source: never touch format/mips unless we have to.
             // -----------------------------------------------------------
             unsigned char sourceRx3Format = MapDXGIToRx3Format(meta.format);
+            if (meta.format == DXGI_FORMAT_R8G8_UNORM && WasSourceA8L8(t.filePath))
+                sourceRx3Format = RX3_TEXFORMAT_AL8;
             rx3Format = sourceRx3Format;
             if (rx3options.gameConfig.TextureFormats.count(rx3Format))
                 rx3Format = rx3options.gameConfig.TextureFormats.at(rx3Format);
@@ -909,7 +953,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<path> const &inTextures, path
             return false;
         return false;
     });
-    ImportTexturesToRX3(rx3, textures, rx3options, withoutNames);
+    return ImportTexturesToRX3(rx3, textures, rx3options, withoutNames);
 }
 
 PackedTextureInfo::PackedTextureInfo() {}
