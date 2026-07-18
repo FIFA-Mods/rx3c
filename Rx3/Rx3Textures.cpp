@@ -874,9 +874,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
                 }
             }
         }
-        texDataWriter.Align();
-        // Overwrite size placeholder at the beginning
-        SetAt(texData.data(), 0, texData.size());
+        texDataWriter.AlignAndUpdateTotalSize();
         Rx3Writer texWriter(rx3.AddChunk(RX3_CHUNK_TEXTURE));
         texWriter.Put(texData.data(), texData.size());
     }
@@ -892,22 +890,15 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
         texHeadersWriter.Put(chunk->mData.data(), 16);
     // 8. Write Global Names Table
     if (!withoutNames) {
-        auto &namesSection = rx3.AddChunk(RX3_CHUNK_NAME_TABLE);
-        Rx3Writer namesWriter(namesSection);
-        namesWriter.Put<unsigned int>(0);
-        namesWriter.Put<unsigned int>(static_cast<unsigned int>(textures.size()));
-        namesWriter.Align();
+        vector<string> texNames;
         for (auto const &t : textures) {
             auto name = t.name;
             // TODO: do not add the suffix for some specific containers (wipe3d, stadium)
             if (rx3options.gameConfig.TextureRasterSuffix && !name.ends_with(".Raster"))
                 name += ".Raster";
-            namesWriter.Put<unsigned int>(RX3_CHUNK_TEXTURE);
-            namesWriter.Put<unsigned int>(static_cast<unsigned int>(name.size() + 1));
-            namesWriter.Put(name.c_str(), name.size() + 1);
+            texNames.push_back(name);
         }
-        namesWriter.Align();
-        SetAt(namesSection.mData.data(), 0, namesSection.mData.size());
+        AddNamesChunkToRx3(rx3, texNames, RX3_CHUNK_TEXTURE);
     }
     // TODO: handle A8 and AL8
     return true;

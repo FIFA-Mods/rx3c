@@ -116,6 +116,20 @@ void Rx3Writer::Reserve(size_t size) {
         mData.reserve(size);
 }
 
+void Rx3Writer::UpdateTotalSize() {
+    if (mData.size() >= 4) {
+        size_t totalSize = mData.size();
+        if (mBigEndian)
+            Rx3SwapEndian(totalSize);
+        SetAt(mData.data(), 0, totalSize);
+    }
+}
+
+void Rx3Writer::AlignAndUpdateTotalSize() {
+    Align();
+    UpdateTotalSize();
+}
+
 Rx3Container::Rx3Container(path const &rx3path) {
     mBigEndian = false;
     Load(rx3path);

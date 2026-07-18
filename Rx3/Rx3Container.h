@@ -150,6 +150,10 @@ public:
     void Align(size_t alignment = 16);
     void SetBigEndian(bool set);
     void Reserve(size_t size);
+    // Writes current size at offset 0
+    void UpdateTotalSize();
+    // Aligns and writes current size at offset 0
+    void AlignAndUpdateTotalSize();
 
     template<typename T>
     void Put(T const &value) {

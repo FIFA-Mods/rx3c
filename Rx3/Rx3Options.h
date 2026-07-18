@@ -36,10 +36,14 @@ struct Rx3Options {
     string textureFormat;
     string modelFormat;
     path skeletonPath;
+    path baseModel;
     map<string, TexFormatTarget> texTargetFormats;
-    bool exportQuads = false;
-    bool writeHDR = true;
-    bool writeTexMetadata = true;
-    eFolderOption folderOption = FOLDER_OPTION_AUTO;
+    bool exportQuads;
+    bool writeHDR;
+    bool writeTexMetadata;
+    eFolderOption folderOption;
     GameConfig gameConfig;
+
+    Rx3Options();
+    Rx3Options(string const &gameName);
 };

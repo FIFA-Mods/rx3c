@@ -154,7 +154,12 @@ T *At(void *object, size_t offset) {
 }
 
 template<typename T>
-T GetAt(void *object, size_t offset) {
+T const *At(void const *object, size_t offset) {
+    return (T const *)((size_t)object + offset);
+}
+
+template<typename T>
+T GetAt(void const *object, size_t offset) {
     return *At<T>(object, offset);
 }
 

@@ -60,9 +60,11 @@
     <ClCompile Include="Rx3\Rx3Container.cpp" />
     <ClCompile Include="Rx3\Rx3Hotspot.cpp" />
     <ClCompile Include="Rx3\Rx3Model.cpp" />
+    <ClCompile Include="Rx3\Rx3Morph.cpp" />
     <ClCompile Include="Rx3\Rx3Names.cpp" />
     <ClCompile Include="Rx3\Rx3Options.cpp" />
     <ClCompile Include="Rx3\Rx3Scene.cpp" />
+    <ClCompile Include="Rx3\Rx3Skeleton.cpp" />
     <ClCompile Include="Rx3\Rx3Textures.cpp" />
     <ClCompile Include="utils\commandline.cpp" />
     <ClCompile Include="utils\errormsg.cpp" />
@@ -72,9 +74,11 @@
     <ClInclude Include="Rx3\Rx3Container.h" />
     <ClInclude Include="Rx3\Rx3Hotspot.h" />
     <ClInclude Include="Rx3\Rx3Model.h" />
+    <ClInclude Include="Rx3\Rx3Morph.h" />
     <ClInclude Include="Rx3\Rx3Names.h" />
     <ClInclude Include="Rx3\Rx3Options.h" />
     <ClInclude Include="Rx3\Rx3Scene.h" />
+    <ClInclude Include="Rx3\Rx3Skeleton.h" />
     <ClInclude Include="Rx3\Rx3Textures.h" />
     <ClInclude Include="utils\commandline.h" />
     <ClInclude Include="utils\errormsg.h" />

@@ -4,8 +4,11 @@
 #include "Rx3Model.h"
 #include "Rx3Textures.h"
 #include "Rx3Hotspot.h"
+#include "Rx3Morph.h"
+#include "Rx3Skeleton.h"
 #include "TextFileTable.h"
 #include <shobjidl.h>
+#include "nlohmann/json.hpp"
 
 const char *RX3C_VERSION = "0.200";
 const unsigned int RX3C_VERSION_INT = 200;
@@ -30,10 +33,48 @@ enum OperationType {
     OP_IMPORT = 2
 };
 
+bool test() {
+    return false;
+    nlohmann::ordered_map<string, array<string, 3>> boneMatrices;
+    auto AddMatrices = [&boneMatrices](Model const &model, size_t column) {
+        for (auto const &bone : model.skeleton.bones) {
+            string matrix;
+            for (size_t r = 0; r < 4; r++) {
+                matrix += Format("%.4f %.4f %.4f %.4f",
+                    bone.matrix.m[r][0], bone.matrix.m[r][1], bone.matrix.m[r][2], bone.matrix.m[r][3]);
+                if (r != 3)
+                    matrix += "\n";
+            }
+            Replace(matrix, "-0.0000", "0.0000");
+            boneMatrices[bone.name][column] = matrix;
+        }
+    };
+    Rx3Options rx3options("fifa16pc");
+    rx3options.skeletonPath = R"(data\skeletons\fifa16pc\skeleton_player.rx3)";
+    Model rx3 = ReadModelFromRX3("head_0_2.rx3", rx3options);
+    AddMatrices(rx3, 0);
+    rx3.WriteFbx("head_0_2.fbx", false);
+    rx3.WriteFbx("head_0_2_ascii.fbx", true);
+    Model fbx("head_0_2.fbx");
+    AddMatrices(fbx, 1);
+    fbx.WriteFbx("head_0_2_rewritten.fbx", false);
+    fbx.WriteFbx("head_0_2_rewritten_ascii.fbx", true);
+    Model fbx_rewritten("head_0_2_rewritten.fbx");
+    AddMatrices(fbx_rewritten, 2);
+    TextFileTable csv;
+    csv.AddRow("Bone", "rx3", "fbx", "fbx_rewritten");
+    for (auto const &[name, matrix] : boneMatrices)
+        csv.AddRow(name, matrix[0], matrix[1], matrix[2]);
+    csv.WriteCSV("matrices.csv");
+    return true;
+}
+
 int wmain(int argc, wchar_t *argv[]) {
+    if (test())
+        return 0;
     CommandLine cmd(argc, argv,
         // arguments
-        { L"i", L"o", L"game", L"skeleton", L"model", L"texture", L"folderOption", L"texFormatFile"},
+        { L"i", L"o", L"game", L"skeleton", L"model", L"texture", L"folderOption", L"texFormatFile", L"baseModel" },
         // options
         { L"export", L"import", L"recursive", L"silent", L"console", L"exportQuads", L"writeHDR", L"writeTexMetadata",
           L"noMetadata" }
@@ -137,6 +178,8 @@ int wmain(int argc, wchar_t *argv[]) {
     }
     if (cmd.HasArgument(L"skeleton"))
         rx3options.skeletonPath = cmd.GetArgumentPath(L"skeleton");
+    if (cmd.HasArgument(L"baseModel"))
+        rx3options.baseModel = cmd.GetArgumentPath(L"baseModel");
     rx3options.exportQuads = cmd.HasOption(L"exportQuads");
     rx3options.writeHDR = cmd.HasOption(L"writeHDR");
     rx3options.writeTexMetadata = cmd.HasOption(L"writeTexMetadata");
@@ -161,11 +204,14 @@ int wmain(int argc, wchar_t *argv[]) {
         vector<path> inModels;
         path inHotspot, inMetadata;
         map<wstring, vector<path>> textureGroups;
+        map<wstring, vector<path>> modelGroups; // Added to group models by name
         vector<path> tempHotspots, tempMetadata;
         for (auto const &file : inFiles) {
             wstring ext = ToLower(file.extension().wstring());
-            if (ext == L".fbx")
-                inModels.push_back(file);
+            if (ext == L".fbx" || ext == L".obj") {
+                path groupKey = file.parent_path() / ToLower(file.stem().wstring());
+                modelGroups[groupKey.wstring()].push_back(file);
+            }
             else if (ext == L".hotspot")
                 tempHotspots.push_back(file);
             else if (ext == L".csv")
@@ -188,38 +234,66 @@ int wmain(int argc, wchar_t *argv[]) {
             inMetadata = tempMetadata.front();
             for (auto const &m : tempMetadata) {
                 if (ToLower(m.stem().wstring()) == ToLower(rx3DefaultName) ||
-                    ToLower(m.stem().wstring()) == ToLower(rx3DefaultName + L"_metadata"))
-                {
+                    ToLower(m.stem().wstring()) == ToLower(rx3DefaultName + L"_metadata")) {
                     inMetadata = m;
                     break;
                 }
             }
         }
-        vector<wstring> extPriority = { L".dds", L".hdr", L".png", L".tga" };
+        vector<wstring> texExtPriority = { L".dds", L".hdr", L".png", L".tga" };
         if (!rx3options.textureFormat.empty()) {
             wstring prefExt = L"." + AtoW(rx3options.textureFormat);
             prefExt = ToLower(prefExt);
-            auto it = find(extPriority.begin(), extPriority.end(), prefExt);
-            if (it != extPriority.end())
-                extPriority.erase(it);
-            extPriority.insert(extPriority.begin(), prefExt);
+            auto it = find(texExtPriority.begin(), texExtPriority.end(), prefExt);
+            if (it != texExtPriority.end())
+                texExtPriority.erase(it);
+            texExtPriority.insert(texExtPriority.begin(), prefExt);
         }
         for (auto const &[groupKey, groupFiles] : textureGroups) {
             if (groupFiles.size() == 1)
                 inTextures.push_back(groupFiles.front());
             else {
                 path bestFile;
-                size_t bestRank = extPriority.size() + 1;
+                size_t bestRank = texExtPriority.size() + 1;
                 for (auto const &file : groupFiles) {
                     wstring ext = ToLower(file.extension().wstring());
-                    auto it = find(extPriority.begin(), extPriority.end(), ext);
-                    size_t rank = (it != extPriority.end()) ? distance(extPriority.begin(), it) : extPriority.size();
+                    auto it = find(texExtPriority.begin(), texExtPriority.end(), ext);
+                    size_t rank = (it != texExtPriority.end()) ? distance(texExtPriority.begin(), it) : texExtPriority.size();
                     if (rank < bestRank) {
                         bestRank = rank;
                         bestFile = file;
                     }
                 }
                 inTextures.push_back(bestFile);
+            }
+        }
+        vector<wstring> modelExtPriority = { L".fbx", L".obj" };
+        if (!rx3options.modelFormat.empty()) {
+            wstring prefExt = L"." + AtoW(rx3options.modelFormat);
+            prefExt = ToLower(prefExt);
+            if (prefExt == L".fbxascii")
+                prefExt = L".fbx";
+            auto it = find(modelExtPriority.begin(), modelExtPriority.end(), prefExt);
+            if (it != modelExtPriority.end())
+                modelExtPriority.erase(it);
+            modelExtPriority.insert(modelExtPriority.begin(), prefExt);
+        }
+        for (auto const &[groupKey, groupFiles] : modelGroups) {
+            if (groupFiles.size() == 1)
+                inModels.push_back(groupFiles.front());
+            else {
+                path bestFile;
+                size_t bestRank = modelExtPriority.size() + 1;
+                for (auto const &file : groupFiles) {
+                    wstring ext = ToLower(file.extension().wstring());
+                    auto it = find(modelExtPriority.begin(), modelExtPriority.end(), ext);
+                    size_t rank = (it != modelExtPriority.end()) ? distance(modelExtPriority.begin(), it) : modelExtPriority.size();
+                    if (rank < bestRank) {
+                        bestRank = rank;
+                        bestFile = file;
+                    }
+                }
+                inModels.push_back(bestFile);
             }
         }
         bool hasNameCollision = false;
@@ -243,11 +317,26 @@ int wmain(int argc, wchar_t *argv[]) {
         }
         if (!inModels.empty()) {
             for (auto const &inModel : inModels) {
-                //Rx3Container rx3;
-                //rx3.AddChunk(RX3_CHUNK_INDEX_BUFFER_BATCH);
-                //if (rx3options.gameConfig.QuadMeshes)
-                //    rx3.AddChunk(RX3_CHUNK_QUAD_INDEX_BUFFER_BATCH);
-                //rx3.Save(outFolder / (inModel.stem().wstring() + L".rx3"));
+                wstring filename = inModel.stem().wstring();
+                wstring loweredFilename = ToLower(filename);
+                Model model = ReadModelFromFile(inModel);
+                // Skeleton
+                if (model.objects.empty() && !model.skeleton.bones.empty()) {
+                    if (!rx3options.skeletonPath.empty())
+                        ModelToSkeletonContainer(model, outFolder / (filename + L".rx3"), rx3options.skeletonPath, rx3options);
+                }
+                else {
+                    // Morph
+                    if (model.HasShapeKeys() && !rx3options.baseModel.empty()) {
+                        bool isMorphtargetsFilename = loweredFilename.ends_with(L"_morphtargets");
+                        wstring outMorphModelName = isMorphtargetsFilename ? (filename + L"_morphtargets") : filename;
+                        ModelToMorphTargetsContainer(model, outFolder / (outMorphModelName + L".rx3"), rx3options.baseModel, rx3options);
+                    }
+                    else {
+                        // Simple model
+                        ModelToSimpleMeshContainer(model, outFolder / (filename + L".rx3"), rx3options);
+                    }
+                }
             }
         }
     };

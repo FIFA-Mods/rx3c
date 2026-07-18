@@ -2,7 +2,10 @@
 #include "Rx3Container.h"
 #include "Rx3Names.h"
 #include "Rx3Scene.h"
+#include "Rx3Morph.h"
 #include "half.hpp"
+
+using namespace memory;
 
 namespace helper::rx3model {
 
@@ -277,6 +280,13 @@ void ReadMatrix4x4(Rx3Reader &reader, Matrix4x4 &out) {
     out = ReadMatrix4x4(reader);
 }
 
+void WriteMatrix4x4(Rx3Writer &writer, Matrix4x4 const &mat) {
+    for (uint32_t r = 0; r < 4; r++) {
+        for (uint32_t c = 0; c < 4; c++)
+            writer.Put<float>(mat.m[r][c]);
+    }
+}
+
 Vector3 ReadVector3(Rx3Reader &reader) {
     Vector3 v;
     for (uint32_t i = 0; i < 3; i++)
@@ -287,6 +297,24 @@ Vector3 ReadVector3(Rx3Reader &reader) {
 void ReadVector3(Rx3Reader &reader, Vector3 &out) {
     out = ReadVector3(reader);
 }
+
+void WriteVector3(Rx3Writer &writer, Vector3 const &v) {
+    for (uint32_t i = 0; i < 3; i++)
+        writer.Put<float>(v[i]);
+}
+
+}
+
+Model ReadModelFromFile(path const &filePath) {
+    Model model;
+    ModelOptions modelOptions;
+    modelOptions.AllowQuads = true;
+    modelOptions.MergeMeshes = true;
+    if (ToLower(filePath.extension().wstring()) == L".obj")
+        model.ReadObj(filePath);
+    else
+        model.ReadFbx(filePath);
+    return model;
 }
 
 void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk *ibChunk, Rx3Chunk *qibChunk, int primType,
@@ -497,28 +525,13 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options)
             auto skeletonSkeletonChunk = skeletonRx3.FindFirstChunk(RX3_CHUNK_SKELETON);
             if (skeletonSkeletonChunk)
                 skeletonChunk = skeletonSkeletonChunk;
-            auto skeletonNameTableChunk = skeletonRx3.FindFirstChunk(RX3_CHUNK_NAME_TABLE);
-            if (skeletonNameTableChunk) {
-                auto names = ExtractNamesFromChunk(skeletonNameTableChunk);
-                for (auto const &[id, name] : names) {
-                    if (id == RX3_CHUNK_BONE_NAME)
-                        boneNames.push_back(name);
-                }
-            }
+            boneNames = ExtractNamesFromRx3(skeletonRx3, RX3_CHUNK_BONE_NAME);
         }
         bool hasSkeleton = animationSkinChunk && skeletonChunk;
-        vector<string> meshNames;
-        auto nameTableChunk = rx3.FindFirstChunk(RX3_CHUNK_NAME_TABLE);
-        if (nameTableChunk) {
-            auto names = ExtractNamesFromChunk(nameTableChunk);
-            for (auto const &[id, name] : names) {
-                if (id == RX3_CHUNK_SIMPLE_MESH) {
-                    if (name.ends_with(".FxRenderableSimple"))
-                        meshNames.push_back(name.substr(0, name.length() - strlen(".FxRenderableSimple")));
-                    else
-                        meshNames.push_back(name);
-                }
-            }
+        vector<string> meshNames = ExtractNamesFromRx3(rx3, RX3_CHUNK_SIMPLE_MESH);
+        for (auto &name : meshNames) {
+            if (name.ends_with(".FxRenderableSimple"))
+                name = name.substr(0, name.length() - strlen(".FxRenderableSimple"));
         }
         auto numMeshes = indexBufferChunks.size();
         uint32_t numBones = 0;
@@ -543,6 +556,7 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options)
                     ReadMatrix4x4(boneMatricesReader, boneInversedMatrices[b]);
                     for (uint32_t j = 0; j < 3; j++)
                         boneInversedMatrices[b].m[3][j] /= 100.0f;
+                    bones[b].properties["ibm"] = boneInversedMatrices[b].ToString();
                     bones[b].matrix = boneInversedMatrices[b].Inversed();
                 }
                 Rx3Reader skeletonReader(skeletonChunk);
@@ -580,10 +594,12 @@ Model ModelFromRX3(Rx3Container &rx3, Rx3Options const &options) {
         return ModelFromSceneContainer(rx3, options);
     else if (rx3.FindFirstChunk(RX3_CHUNK_SIMPLE_MESH))
         return ModelFromSimpleMeshContainer(rx3, options);
+    else if (rx3.FindFirstChunk(RX3_CHUNK_MORPH_INDEXED) && !options.baseModel.empty())
+        return ModelFromMorphTargetsContainer(rx3, options.baseModel, options);
     return Model();
 }
 
-void ModelToRX3SimpleMesh(Model const &model, path const &rx3path, Rx3Options const &options) {
+void ModelToSimpleMeshContainer(Model const &model, path const &rx3path, Rx3Options const &options) {
     Rx3Container rx3;
     // ibbatch, quadibbatch, vertexformat's, nametable, ib's, qib's, boneremap's, vb's, animationskin's,
     // simplemesh's, adjacency's
@@ -593,9 +609,16 @@ void ModelToRX3SimpleMesh(Model const &model, path const &rx3path, Rx3Options co
 
 void ExtractModelFromRX3(Rx3Container &container, path const &outputDir, Rx3Options const &rx3options) {
     Model m = ModelFromRX3(container, rx3options);
-    if (!m.objects.empty() || !m.skeleton.bones.empty()) {
-        if (!exists(outputDir))
-            create_directories(outputDir);
+    if (!exists(outputDir))
+        create_directories(outputDir);
+    bool preferFbx = m.IsSkeleton() || m.HasShapeKeys();
+    if (rx3options.modelFormat == "obj" && !preferFbx)
+        m.WriteObj(outputDir / (container.mName + ".obj"));
+    else
         m.WriteFbx(outputDir / (container.mName + ".fbx"), rx3options.modelFormat == "fbxascii");
-    }
+}
+
+Model ReadModelFromRX3(path const &rx3path, Rx3Options rx3options) {
+    Rx3Container rx3(rx3path);
+    return ModelFromRX3(rx3, rx3options);
 }

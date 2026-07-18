@@ -124,7 +124,5 @@ void ImportHotspotToRX3(Rx3Container &container, path const &hotspotFile, Rx3Opt
                 hotspotWriter.Put<float>(b);
         }
     }
-
-    hotspotWriter.Align();
-    SetAt(hotspotChunk.mData.data(), 0, hotspotChunk.mData.size());
+    hotspotWriter.AlignAndUpdateTotalSize();
 }

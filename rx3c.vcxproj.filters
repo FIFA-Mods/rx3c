@@ -32,6 +32,12 @@
     <ClCompile Include="Rx3\Rx3Scene.cpp">
       <Filter>Rx3</Filter>
     </ClCompile>
+    <ClCompile Include="Rx3\Rx3Morph.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="Rx3\Rx3Skeleton.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Rx3">
@@ -73,6 +79,12 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="Rx3\Rx3Scene.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\Rx3Morph.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\Rx3Skeleton.h">
       <Filter>Rx3</Filter>
     </ClInclude>
   </ItemGroup>

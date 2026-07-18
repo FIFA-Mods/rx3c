@@ -135,3 +135,16 @@ GameConfig::GameConfig(bool _BigEndian, unsigned char _BonesPerVertex, unsigned 
     StadiumTexturesAndModelInOneContainer = _StadiumTexturesAndModelInOneContainer;
     TextureFormats = _TextureFormats;
 }
+
+Rx3Options::Rx3Options() : Rx3Options("fifa16pc") {}
+
+Rx3Options::Rx3Options(string const &gameName) {
+    game = gameName;
+    textureFormat = "png";
+    modelFormat = "fbx";
+    exportQuads = false;
+    writeHDR = true;
+    writeTexMetadata = true;
+    folderOption = FOLDER_OPTION_AUTO;
+    gameConfig = GameConfigs()[gameName];
+}

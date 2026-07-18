@@ -108,22 +108,19 @@ Model ModelFromSceneContainer(Rx3Container &rx3, Rx3Options const &options) {
     if (!sceneLayerChunks.empty()) {
         vector<string> allNames, meshNames, locationNames, texNames;
         set<string> usedTextures;
-        auto nameTableChunk = rx3.FindFirstChunk(RX3_CHUNK_NAME_TABLE);
-        if (nameTableChunk) {
-            auto names = ExtractNamesFromChunk(nameTableChunk);
-            for (auto const &[id, name] : names) {
-                if (id == RX3_CHUNK_SIMPLE_MESH) {
-                    if (name.ends_with(".FxRenderableSimple"))
-                        meshNames.push_back(name.substr(0, name.length() - strlen(".FxRenderableSimple")));
-                    else
-                        meshNames.push_back(name);
-                }
-                else if (id == RX3_CHUNK_LOCATION)
-                    locationNames.push_back(name);
-                else if (id == RX3_CHUNK_TEXTURE)
-                    texNames.push_back(name);
-                allNames.push_back(name);
+        auto names = ExtractNamesFromRx3(rx3);
+        for (auto const &[id, name] : names) {
+            if (id == RX3_CHUNK_SIMPLE_MESH) {
+                if (name.ends_with(".FxRenderableSimple"))
+                    meshNames.push_back(name.substr(0, name.length() - strlen(".FxRenderableSimple")));
+                else
+                    meshNames.push_back(name);
             }
+            else if (id == RX3_CHUNK_LOCATION)
+                locationNames.push_back(name);
+            else if (id == RX3_CHUNK_TEXTURE)
+                texNames.push_back(name);
+            allNames.push_back(name);
         }
         vector<uint32_t> primTypes;
         for (auto const &gt : meshChunks) {
