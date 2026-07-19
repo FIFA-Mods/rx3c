@@ -92,10 +92,6 @@ void ModelToMorphTargetsContainer(Model const &model, path const &rx3path, path 
                     morphWriter.Put<uint16_t>(vertexIndex);
                 for (auto const &[vertexIndex, deltaPos] : deltas)
                     WriteVector3(morphWriter, deltaPos * 100.0f);
-                if (i == 0) {
-                    ::Message("object %s colors %d verts %d shapeKeyVerts %d uniqueShapeKeyVerts %d",
-                        obj->name.c_str(), NumColors(obj->vertexFormat), obj->vertices.size(), obj->shapeKeys[0].vertices.size(), deltas.size());
-                }
             }
         }
         morphWriter.AlignAndUpdateTotalSize();

@@ -18,10 +18,6 @@ struct PackedTextureInfo {
     PackedTextureInfo(string const &_name, path const &_filePath, int _format, char _levels, unsigned short _width, unsigned short _height);
 };
 
-int TexFormatNameToID(string const &name);
-void ReadTexFormatFile(path const &filePath, map<string, TexFormatTarget> &out,
-    vector<string> &outOrder);
-
 void ExtractTexturesFromRX3(Rx3Container &container, path const &outputDir, Rx3Options const &rx3options);
 bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &inTextures, Rx3Options const &rx3options,
     bool withoutNames = false);

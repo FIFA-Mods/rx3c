@@ -3,6 +3,7 @@
 #include "Model.h"
 #include "Rx3Model.h"
 #include "Rx3Textures.h"
+#include "Rx3TextureMetadata.h"
 #include "Rx3Hotspot.h"
 #include "Rx3Morph.h"
 #include "Rx3Skeleton.h"

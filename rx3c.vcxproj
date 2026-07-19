@@ -65,6 +65,7 @@
     <ClCompile Include="Rx3\Rx3Options.cpp" />
     <ClCompile Include="Rx3\Rx3Scene.cpp" />
     <ClCompile Include="Rx3\Rx3Skeleton.cpp" />
+    <ClCompile Include="Rx3\Rx3TextureMetadata.cpp" />
     <ClCompile Include="Rx3\Rx3Textures.cpp" />
     <ClCompile Include="utils\commandline.cpp" />
     <ClCompile Include="utils\errormsg.cpp" />
@@ -79,6 +80,7 @@
     <ClInclude Include="Rx3\Rx3Options.h" />
     <ClInclude Include="Rx3\Rx3Scene.h" />
     <ClInclude Include="Rx3\Rx3Skeleton.h" />
+    <ClInclude Include="Rx3\Rx3TextureMetadata.h" />
     <ClInclude Include="Rx3\Rx3Textures.h" />
     <ClInclude Include="utils\commandline.h" />
     <ClInclude Include="utils\errormsg.h" />

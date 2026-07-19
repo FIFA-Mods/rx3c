@@ -27,7 +27,7 @@ void WriteVector3(Rx3Writer &writer, Vector3 const &v);
 Model ReadModelFromFile(path const &filePath);
 Model ReadModelFromRX3(path const &rx3path, Rx3Options rx3options = Rx3Options());
 void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk *ibChunk, Rx3Chunk *qibChunk, int primType,
-    Rx3Options const &options);
+    unsigned int numBones, Rx3Options const &options);
 void ExtractModelFromRX3(Rx3Container &container, path const &outputDir, Rx3Options const &rx3options);
 Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options);
 void ModelToSimpleMeshContainer(Model const &model, path const &rx3path, Rx3Options const &options);

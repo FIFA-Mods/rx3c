@@ -1,10 +1,10 @@
 #include "Rx3Textures.h"
+#include "Rx3TextureMetadata.h"
 #include "Rx3Names.h"
 #include "errormsg.h"
 #include "DirectXTex.h"
 #include <wincodec.h>
 #include <fstream>
-#include "TextFileTable.h"
 
 using namespace DirectX;
 using namespace memory;
@@ -126,82 +126,6 @@ unsigned char CalcMaxMipLevel(unsigned short height, unsigned short width) {
         result++;
     }
     return result;
-}
-
-int TexFormatNameToID(string const &name) {
-    static map<string, int> texFormatNameToID = {
-        { "DXT1", 0 },
-        { "BC1", 0 },
-        { "DXT3", 1 },
-        { "BC2", 1 },
-        { "DXT5", 2 },
-        { "BC3", 2 },
-        { "ARGB8888", 3 },
-        { "A8R8G8B8", 3 },
-        { "L8", 4 },
-        { "AL8", 5 },
-        { "A8L8", 5 },
-        { "RG8", 6 },
-        { "R8G8", 6 },
-        { "BC5", 7 },
-        { "ATI2", 7 },
-        { "RGB565", 8 },
-        { "R5G6B5", 8 },
-        { "ARGB4444", 9 },
-        { "A4R4G4B4", 9 },
-        { "BC6", 10 },
-        { "BC6H", 10 },
-        { "BC6UF", 10 },
-        { "BC7", 11 },
-        { "BC4", 12 },
-        { "ATI1", 12 }
-    };
-    auto upper = ToUpper(name);
-    if (texFormatNameToID.contains(upper))
-        return texFormatNameToID[upper];
-    return -1;
-}
-
-void ReadTexFormatFile(path const &filePath, map<string, TexFormatTarget> &out, vector<string> &outOrder) {
-    if (exists(filePath)) {
-        TextFileTable texFormatsTable;
-        if (texFormatsTable.ReadCSV(filePath)) {
-            for (size_t r = 0; r < texFormatsTable.NumRows(); r++) {
-                auto const &row = texFormatsTable.Row(r);
-                if (row.size() >= 2 && !row[0].empty()) {
-                    string name = ToLower(WtoA(row[0]));
-                    Trim(name);
-                    TexFormatTarget t;
-                    for (size_t c = 1; c < min(4u, row.size()); c++) {
-                        string value = ToLower(WtoA(row[c]));
-                        Trim(value);
-                        if (IsNumber(value, false))
-                            t.levels = SafeConvertInt<char>(row[2]);
-                        else {
-                            auto format = TexFormatNameToID(value);
-                            if (format != -1)
-                                t.format = format;
-                            else {
-                                auto dim = Split(value, 'x');
-                                if (dim.size() == 2 && IsNumber(dim[0], false) && IsNumber(dim[1], false)) {
-                                    auto IsProperDim = [](int value) { return value > 0 && value <= 16384; };
-                                    int width = SafeConvertInt<unsigned short>(dim[0]);
-                                    int height = SafeConvertInt<unsigned short>(dim[1]);
-                                    if (IsProperDim(width) && IsProperDim(height)) {
-                                        t.width = width;
-                                        t.height = height;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (!out.contains(name))
-                        outOrder.push_back(name);
-                    out[name] = t;
-                }
-            }
-        }
-    }
 }
 
 void ExtractTexturesFromRX3(Rx3Container &container, path const &outputDir, Rx3Options const &rx3options) {
@@ -446,12 +370,7 @@ size_t NextPowerOfTwo(size_t x) {
     return p;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// Full mip chain length for a given base size (2D or volume).
-static size_t ComputeFullMipCount(size_t w, size_t h, size_t d = 1) {
+size_t ComputeFullMipCount(size_t w, size_t h, size_t d = 1) {
     size_t levels = 1;
     while (w > 1 || h > 1 || d > 1) {
         if (w > 1) w >>= 1;
@@ -462,12 +381,7 @@ static size_t ComputeFullMipCount(size_t w, size_t h, size_t d = 1) {
     return levels;
 }
 
-// Walks the standard mip chain starting at (origW, origH) and returns the
-// level index whose size exactly matches (targetW, targetH), or -1 if none
-// of the first `maxLevels` levels match. Used to detect "the requested
-// downsize is just an existing mip level" so we can drop mips instead of
-// resampling.
-static int FindMipLevelForSize(size_t origW, size_t origH, size_t targetW, size_t targetH, size_t maxLevels) {
+int FindMipLevelForSize(size_t origW, size_t origH, size_t targetW, size_t targetH, size_t maxLevels) {
     size_t w = origW, h = origH;
     for (size_t level = 0; level < maxLevels; ++level) {
         if (w == targetW && h == targetH)
@@ -480,11 +394,6 @@ static int FindMipLevelForSize(size_t origW, size_t origH, size_t targetW, size_
     return -1;
 }
 
-// Builds a new ScratchImage containing only mip levels [dropLevels .. end)
-// of `src`, i.e. drops the `dropLevels` largest mips. Works for 2D, arrays,
-// cubes, and volume textures. No resampling/conversion is performed - this
-// is a straight data copy, which is only valid because the dropped-to level
-// already exists as real data in the source.
 static bool ExtractSubMipChain(ScratchImage const &src, size_t dropLevels, ScratchImage &dst) {
     auto const &meta = src.GetMetadata();
     if (dropLevels == 0 || dropLevels >= meta.mipLevels)
@@ -565,10 +474,6 @@ bool WasSourceA8L8(path const &ddsPath) {
         return false;
     return (pf.flags & DDPF_LUMINANCE) && (pf.flags & DDPF_ALPHAPIXELS) && pf.rgbBitCount == 16;
 }
-
-// ---------------------------------------------------------------------------
-// Main routine
-// ---------------------------------------------------------------------------
 
 bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &textures, Rx3Options const &rx3options,
     bool withoutNames)
@@ -900,7 +805,6 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<PackedTextureInfo> const &tex
         }
         AddNamesChunkToRx3(rx3, texNames, RX3_CHUNK_TEXTURE);
     }
-    // TODO: handle A8 and AL8
     return true;
 }
 
@@ -910,29 +814,57 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<path> const &inTextures, path
     vector<string> order;
     if (!localMetadataFile.empty())
         ReadTexFormatFile(localMetadataFile, metadata, order);
+
+    // Pre-parse all generalized ("X"-containing) entries once.
+    vector<TexNamePattern> patterns;
+    for (auto const &[key, value] : metadata) {
+        if (key.find('X') == string::npos)
+            continue; // plain entry, handled by exact match below
+        TexNamePattern pattern;
+        if (TryParseTexNamePattern(key, pattern))
+            patterns.push_back(std::move(pattern));
+        // else: ambiguous entry (e.g. "fileXX") - silently ignored
+    }
+
     vector<PackedTextureInfo> textures;
+    unordered_map<string, string> matchedKeyByName; // texture name -> metadata key actually used
     for (auto const &p : inTextures) {
         PackedTextureInfo t;
         t.filePath = p;
         t.name = p.stem().string();
         auto nameLowered = ToLower(t.name);
-        if (metadata.contains(nameLowered)) {
-            auto m = metadata[nameLowered];
+
+        string const *matchedKey = nullptr;
+        if (auto exactIt = metadata.find(nameLowered); exactIt != metadata.end())
+            matchedKey = &exactIt->first;
+        else
+            matchedKey = FindBestPatternMatch(patterns, nameLowered);
+
+        if (matchedKey) {
+            auto const &m = metadata.at(*matchedKey);
             t.format = m.format;
             t.width = m.width;
             t.height = m.height;
             t.levels = m.levels;
+            matchedKeyByName[nameLowered] = *matchedKey;
         }
+
         textures.push_back(t);
     }
+
     unordered_map<string, size_t> orderLookup;
     for (size_t i = 0; i < order.size(); ++i)
         orderLookup[order[i]] = i;
+
     stable_sort(textures.begin(), textures.end(), [&](const PackedTextureInfo &a, const PackedTextureInfo &b) {
         auto nameA = ToLower(a.name);
         auto nameB = ToLower(b.name);
-        auto itA = orderLookup.find(nameA);
-        auto itB = orderLookup.find(nameB);
+        auto keyItA = matchedKeyByName.find(nameA);
+        auto keyItB = matchedKeyByName.find(nameB);
+        string const &lookupKeyA = (keyItA != matchedKeyByName.end()) ? keyItA->second : nameA;
+        string const &lookupKeyB = (keyItB != matchedKeyByName.end()) ? keyItB->second : nameB;
+        auto itA = orderLookup.find(lookupKeyA);
+        auto itB = orderLookup.find(lookupKeyB);
         bool hasA = (itA != orderLookup.end());
         bool hasB = (itB != orderLookup.end());
         if (hasA && hasB)
@@ -943,6 +875,7 @@ bool ImportTexturesToRX3(Rx3Container &rx3, vector<path> const &inTextures, path
             return false;
         return false;
     });
+
     return ImportTexturesToRX3(rx3, textures, rx3options, withoutNames);
 }
 

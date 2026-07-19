@@ -3,6 +3,7 @@
 #include "Rx3Names.h"
 #include "Rx3Scene.h"
 #include "Rx3Morph.h"
+#include "Rx3Skeleton.h"
 #include "half.hpp"
 
 using namespace memory;
@@ -310,15 +311,12 @@ Model ReadModelFromFile(path const &filePath) {
     ModelOptions modelOptions;
     modelOptions.AllowQuads = true;
     modelOptions.MergeMeshes = true;
-    if (ToLower(filePath.extension().wstring()) == L".obj")
-        model.ReadObj(filePath);
-    else
-        model.ReadFbx(filePath);
+    model.Read(filePath, modelOptions);
     return model;
 }
 
 void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk *ibChunk, Rx3Chunk *qibChunk, int primType,
-    Rx3Options const &options)
+    unsigned int numBones, Rx3Options const &options)
 {
     using namespace helper::rx3model;
     obj.vertexFormat = 0;
@@ -420,7 +418,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                 else if (usage == 'i') {
                     if (usageIndex <= 1) {
                         SetNumBones(obj.vertexFormat, (usageIndex + 1) * 4);
-                        if (t == dt_4u8 && options.gameConfig.MaxBones > 255)
+                        if (t == dt_4u8 && numBones > 255)
                             t = dt_4u16;
                         for (uint32_t v = 0; v < numVertices; v++) {
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
@@ -562,15 +560,7 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options)
                 Rx3Reader skeletonReader(skeletonChunk);
                 skeletonReader.Skip(16);
                 for (uint32_t b = 0; b < numBones; b++) {
-                    int16_t parentIndex = -1;
-                    if (options.gameConfig.MaxBones > 255)
-                        parentIndex = skeletonReader.Read<int16_t>();
-                    else {
-                        parentIndex = skeletonReader.Read<uint8_t>();
-                        skeletonReader.Skip(1);
-                        if (parentIndex == 255)
-                            parentIndex = -1;
-                    }
+                    int16_t parentIndex = skeletonReader.Read<int16_t>();
                     if (parentIndex >= 0 && parentIndex < (int32_t)bones.size()) {
                         bones[b].parent = bones[parentIndex].name;
                         bones[b].matrix = boneInversedMatrices[parentIndex] * bones[b].matrix;
@@ -583,7 +573,8 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options)
             obj.name = i < meshNames.size() ? meshNames[i] : "object_" + to_string(i);
             int primType = i < primTypes.size() ? primTypes[i] : RX3_PRIM_TRIANGLELIST;
             auto quadBuffer = quadBufferChunks.size() == indexBufferChunks.size() ? quadBufferChunks[i] : nullptr;
-            SetupObjectMesh(obj, vertexFormatChunks[i], vertexBufferChunks[i], indexBufferChunks[i], quadBuffer, primType, options);
+            SetupObjectMesh(obj, vertexFormatChunks[i], vertexBufferChunks[i], indexBufferChunks[i], quadBuffer, primType,
+                numBones, options);
         }
     }
     return model;
@@ -596,6 +587,8 @@ Model ModelFromRX3(Rx3Container &rx3, Rx3Options const &options) {
         return ModelFromSimpleMeshContainer(rx3, options);
     else if (rx3.FindFirstChunk(RX3_CHUNK_MORPH_INDEXED) && !options.baseModel.empty())
         return ModelFromMorphTargetsContainer(rx3, options.baseModel, options);
+    else if (rx3.FindFirstChunk(RX3_CHUNK_SKELETON))
+        return ModelFromSkeletonContainer(rx3, options);
     return Model();
 }
 
@@ -611,11 +604,8 @@ void ExtractModelFromRX3(Rx3Container &container, path const &outputDir, Rx3Opti
     Model m = ModelFromRX3(container, rx3options);
     if (!exists(outputDir))
         create_directories(outputDir);
-    bool preferFbx = m.IsSkeleton() || m.HasShapeKeys();
-    if (rx3options.modelFormat == "obj" && !preferFbx)
-        m.WriteObj(outputDir / (container.mName + ".obj"));
-    else
-        m.WriteFbx(outputDir / (container.mName + ".fbx"), rx3options.modelFormat == "fbxascii");
+    bool fbx = m.IsSkeleton() || m.HasShapeKeys() || rx3options.modelFormat != "obj";
+    m.Write(outputDir / (container.mName + (fbx ? ".fbx" : ".obj")), rx3options.modelFormat == "fbxascii");
 }
 
 Model ReadModelFromRX3(path const &rx3path, Rx3Options rx3options) {
