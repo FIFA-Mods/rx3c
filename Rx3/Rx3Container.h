@@ -31,11 +31,12 @@ enum Rx3ChunkId : uint32_t {
     RX3_CHUNK_HOTSPOT = Rx3Hash("hotspot"),
     RX3_CHUNK_MATERIAL = Rx3Hash("material"),
     RX3_CHUNK_COLLISION = Rx3Hash("collision"),
-    RX3_CHUNK_COLLISION_TRI_MESH = Rx3Hash("collisiontrimesh"),
     RX3_CHUNK_SCENE_INSTANCE = Rx3Hash("sceneinstance"),
     RX3_CHUNK_SCENE_LAYER = Rx3Hash("scenelayer"),
     RX3_CHUNK_SCENE_ANIMATION = Rx3Hash("sceneanimation"),
     RX3_CHUNK_MORPH_INDEXED = Rx3Hash("morphindexed"),
+    // since FIFA 14
+    RX3_CHUNK_COLLISION_TRI_MESH = Rx3Hash("collisiontrimesh"),
     // since FIFA 15
     RX3_CHUNK_SKELETON = Rx3Hash("skeleton"),
     RX3_CHUNK_CLOTH_DEF = Rx3Hash("clothdef"),
@@ -43,7 +44,9 @@ enum Rx3ChunkId : uint32_t {
     RX3_CHUNK_QUAD_INDEX_BUFFER_BATCH = Rx3Hash("quadibbatch"),
     RX3_CHUNK_QUAD_INDEX_BUFFER = Rx3Hash("qib"),
     RX3_CHUNK_BONE_NAME = Rx3Hash("bonename"),
-    RX3_CHUNK_ADJACENCY = Rx3Hash("adjacency")
+    RX3_CHUNK_ADJACENCY = Rx3Hash("adjacency"),
+    // custom
+    RX3_CHUNK_METADATA = Rx3Hash("metadata"),
 };
 
 enum Rx3TextureBaseFormat : uint8_t {
@@ -172,7 +175,7 @@ public:
     path mPath;
     bool mBigEndian;
 
-    Rx3Container();
+    Rx3Container(bool bigEndian = false);
     Rx3Container(path const &rx3path);
     bool Load(path const &rx3path);
     bool Save(path const &rx3path);

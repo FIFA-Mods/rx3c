@@ -11,9 +11,6 @@
 #include <shobjidl.h>
 #include "nlohmann/json.hpp"
 
-const char *RX3C_VERSION = "0.200";
-const unsigned int RX3C_VERSION_INT = 200;
-
 enum ErrorType {
     NONE = 0,
     NOT_ENOUGHT_ARGUMENTS = 1,
@@ -51,15 +48,13 @@ bool test() {
         }
     };
     Rx3Options rx3options("fifa16pc");
-    rx3options.skeletonPath = R"(data\skeletons\fifa16pc\skeleton_player.rx3)";
+    rx3options.targetSkeleton = ReadModelFromRX3(R"(data\skeletons\fifa16pc\skeleton_player.rx3)").skeleton;
     Model rx3 = ReadModelFromRX3("head_0_2.rx3", rx3options);
     AddMatrices(rx3, 0);
-    rx3.WriteFbx("head_0_2.fbx", false);
-    rx3.WriteFbx("head_0_2_ascii.fbx", true);
+    rx3.WriteFbx("head_0_2.fbx");
     Model fbx("head_0_2.fbx");
     AddMatrices(fbx, 1);
-    fbx.WriteFbx("head_0_2_rewritten.fbx", false);
-    fbx.WriteFbx("head_0_2_rewritten_ascii.fbx", true);
+    fbx.WriteFbx("head_0_2_rewritten.fbx");
     Model fbx_rewritten("head_0_2_rewritten.fbx");
     AddMatrices(fbx_rewritten, 2);
     TextFileTable csv;
@@ -155,6 +150,7 @@ int wmain(int argc, wchar_t *argv[]) {
     }
 
     Rx3Options rx3options;
+    rx3options.cmdLine = ToUTF8(GetCommandLineW());
 
     if (cmd.HasArgument(L"game"))
         rx3options.game = ToLower(WtoA(cmd.GetArgumentString(L"game")));
@@ -168,8 +164,11 @@ int wmain(int argc, wchar_t *argv[]) {
         rx3options.modelFormat = ToLower(WtoA(cmd.GetArgumentString(L"model")));
     if (cmd.HasArgument(L"texture"))
         rx3options.textureFormat = ToLower(WtoA(cmd.GetArgumentString(L"texture")));
-    if (cmd.HasArgument(L"skeleton"))
-        rx3options.skeletonPath = cmd.GetArgumentPath(L"skeleton");
+    if (cmd.HasArgument(L"skeleton")) {
+        path skeletonPath = cmd.GetArgumentPath(L"skeleton");
+        if (exists(skeletonPath))
+            rx3options.targetSkeleton = ReadModelFromRX3(skeletonPath).skeleton;
+    }
     if (cmd.HasArgument(L"folderOption")) {
         auto strFolderOption = ToLower(cmd.GetArgumentString(L"folderOption"));
         if (strFolderOption == L"alwaysCreate")
@@ -177,10 +176,11 @@ int wmain(int argc, wchar_t *argv[]) {
         else if (strFolderOption == L"neverCreate")
             rx3options.folderOption = FOLDER_OPTION_NEVER_CREATE;
     }
-    if (cmd.HasArgument(L"skeleton"))
-        rx3options.skeletonPath = cmd.GetArgumentPath(L"skeleton");
-    if (cmd.HasArgument(L"baseModel"))
-        rx3options.baseModel = cmd.GetArgumentPath(L"baseModel");
+    if (cmd.HasArgument(L"baseModel")) {
+        path baseModelPath = cmd.GetArgumentPath(L"baseModel");
+        if (exists(baseModelPath))
+            rx3options.baseModel = ReadModelFromRX3(baseModelPath);
+    }
     rx3options.exportQuads = cmd.HasOption(L"exportQuads");
     rx3options.writeHDR = cmd.HasOption(L"writeHDR");
     rx3options.writeTexMetadata = cmd.HasOption(L"writeTexMetadata");
@@ -188,7 +188,7 @@ int wmain(int argc, wchar_t *argv[]) {
         vector<string> order;
         ReadTexFormatFile(cmd.GetArgumentPath(L"texFormatFile"), rx3options.texTargetFormats, order);
     }
-    bool noMetadata = cmd.HasOption(L"noMetadata");
+    rx3options.metadata = !cmd.HasOption(L"noMetadata");
 
     auto ExportRX3 = [&](path const &in, path const &outFolder) {
         Rx3Container rx3(in);
@@ -305,16 +305,22 @@ int wmain(int argc, wchar_t *argv[]) {
             }
         }
         if (!inTextures.empty()) {
-            Rx3Container rx3;
+            Rx3Container rx3(rx3options.gameConfig.BigEndian);
             rx3.AddChunk(RX3_CHUNK_TEXTURE_BATCH);
             ImportTexturesToRX3(rx3, inTextures, inMetadata, rx3options);
             if (!inHotspot.empty())
                 ImportHotspotToRX3(rx3, inHotspot, rx3options);
             wstring textureFileName = rx3DefaultName;
-            if (hasNameCollision) {
+            if (hasNameCollision)
                 textureFileName += L"_textures";
+            path rx3path = outFolder / (textureFileName + L".rx3");
+            if (rx3options.metadata) {
+                string sourceFiles = ToUTF8(inTextures[0].c_str());
+                for (size_t ti = 1; ti < inTextures.size(); ti++)
+                    sourceFiles += ";" + ToUTF8(inTextures[ti].c_str());
+                AddMetadataToRx3(rx3, sourceFiles, rx3path, rx3options.cmdLine);
             }
-            rx3.Save(outFolder / (textureFileName + L".rx3"));
+            rx3.Save(rx3path);
         }
         if (!inModels.empty()) {
             for (auto const &inModel : inModels) {
@@ -322,20 +328,20 @@ int wmain(int argc, wchar_t *argv[]) {
                 wstring loweredFilename = ToLower(filename);
                 Model model = ReadModelFromFile(inModel);
                 // Skeleton
-                if (model.objects.empty() && !model.skeleton.bones.empty()) {
-                    if (!rx3options.skeletonPath.empty())
-                        ModelToSkeletonContainer(model, outFolder / (filename + L".rx3"), rx3options.skeletonPath, rx3options);
+                if (model.IsSkeleton()) {
+                    if (!rx3options.targetSkeleton.bones.empty())
+                        ModelToSkeletonContainer(model, inModel, outFolder / (filename + L".rx3"), rx3options);
                 }
                 else {
                     // Morph
-                    if (model.HasShapeKeys() && !rx3options.baseModel.empty()) {
+                    if (model.HasShapeKeys() && !rx3options.baseModel.objects.empty()) {
                         bool isMorphtargetsFilename = loweredFilename.ends_with(L"_morphtargets");
                         wstring outMorphModelName = isMorphtargetsFilename ? (filename + L"_morphtargets") : filename;
-                        ModelToMorphTargetsContainer(model, outFolder / (outMorphModelName + L".rx3"), rx3options.baseModel, rx3options);
+                        ModelToMorphTargetsContainer(model, inModel, outFolder / (outMorphModelName + L".rx3"), rx3options);
                     }
-                    else {
+                    else if (!model.objects.empty()) {
                         // Simple model
-                        ModelToSimpleMeshContainer(model, outFolder / (filename + L".rx3"), rx3options);
+                        ModelToSimpleMeshContainer(model, inModel, outFolder / (filename + L".rx3"), rx3options);
                     }
                 }
             }

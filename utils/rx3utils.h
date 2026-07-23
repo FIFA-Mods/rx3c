@@ -146,6 +146,8 @@ bool StartsWith(wstring const &str, wstring const &what);
 bool StartsWith(string const &str, string const &what);
 bool IsNumber(wstring const &str, bool hexadecimal);
 bool IsNumber(string const &str, bool hexadecimal);
+string ToUTF8(wstring const &wstr);
+wstring ToUTF16(string const &str);
 
 namespace memory {
 template<typename T>

@@ -217,8 +217,8 @@ bool Rx3Container::Save(path const &rx3path) {
     return result;
 }
 
-Rx3Container::Rx3Container() {
-    mBigEndian = false;
+Rx3Container::Rx3Container(bool bigEndian) {
+    mBigEndian = bigEndian;
 }
 
 Rx3Chunk *Rx3Container::FindFirstChunk(uint32_t chunkId) {

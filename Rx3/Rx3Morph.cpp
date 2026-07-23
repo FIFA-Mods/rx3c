@@ -4,23 +4,9 @@
 
 using namespace memory;
 
-Model ReadMorphTargetsBaseModel(path const &baseModelPath, Rx3Options const &options) {
-    Model model;
-    auto ext = ToLower(baseModelPath.extension().string());
-    if (ext == ".rx3") {
-        Rx3Container baseRx3(baseModelPath);
-        model = ModelFromSimpleMeshContainer(baseRx3, options);
-    }
-    else
-        model = ReadModelFromFile(baseModelPath);
-    return model;
-}
-
-Model ModelFromMorphTargetsContainer(Rx3Container &rx3, path const &baseModelPath, Rx3Options const &options) {
+Model ModelFromMorphTargetsContainer(Rx3Container &rx3, Rx3Options const &options) {
     using namespace helper::rx3model;
-    if (!exists(baseModelPath))
-        return Model();
-    Model model = ReadMorphTargetsBaseModel(baseModelPath, options);
+    Model model = options.baseModel;
     if (model.objects.empty())
         return Model();
     auto morphChunks = rx3.FindAllChunks(RX3_CHUNK_MORPH_INDEXED);
@@ -55,19 +41,16 @@ Model ModelFromMorphTargetsContainer(Rx3Container &rx3, path const &baseModelPat
     return model;
 }
 
-void ModelToMorphTargetsContainer(Model const &model, path const &rx3path, path const &baseModelPath, Rx3Options const &options) {
+void ModelToMorphTargetsContainer(Model const &model, path const &sourcePath, path const &rx3path, Rx3Options const &options) {
     using namespace helper::rx3model;
-    if (!exists(baseModelPath))
-        return;
-    Model baseModel = ReadMorphTargetsBaseModel(baseModelPath, options);
-    if (baseModel.objects.empty())
+    if (options.baseModel.objects.empty())
         return;
     vector<pair<string, Object const *>> objects;
-    for (auto const &baseModelObj : baseModel.objects) {
+    for (auto const &baseModelObj : options.baseModel.objects) {
         if (!baseModelObj.vertices.empty())
             objects.emplace_back(baseModelObj.name, model.GetObjectByName(baseModelObj.name, true));
     }
-    Rx3Container rx3;
+    Rx3Container rx3(options.gameConfig.BigEndian);
     // nametable, morphindexed's
     vector<string> shapeKeyNames;
     for (auto const &[name, obj] : objects)
@@ -96,5 +79,7 @@ void ModelToMorphTargetsContainer(Model const &model, path const &rx3path, path 
         }
         morphWriter.AlignAndUpdateTotalSize();
     }
+    if (options.metadata)
+        AddMetadataToRx3(rx3, sourcePath, rx3path, options.cmdLine);
     rx3.Save(rx3path);
 }

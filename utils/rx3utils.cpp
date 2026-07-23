@@ -541,6 +541,24 @@ bool IsNumber(string const &str, bool hexadecimal) {
     return true;
 }
 
+string ToUTF8(wstring const &wstr) {
+    if (wstr.empty())
+        return string();
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
+    string strTo(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
+    return strTo;
+}
+
+wstring ToUTF16(string const &str) {
+    if (str.empty())
+        return wstring();
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
+    wstring strTo(size_needed, 0);
+    MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &strTo[0], size_needed);
+    return strTo;
+}
+
 namespace memory {
 size_t GetNumBytesToAlign(size_t offset, size_t alignment) {
     size_t m = offset % alignment;

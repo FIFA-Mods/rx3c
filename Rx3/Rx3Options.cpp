@@ -1,15 +1,18 @@
 #include "Rx3Options.h"
 #include "Rx3Container.h"
 
+const char *RX3C_VERSION = "0.200";
+
 map<string, GameConfig> &GameConfigs() {
     static map<string, GameConfig> configs = {
         { "fifa12pc", GameConfig(
             true,  // BigEndian
-            4,     // BonesPerVertex
-            255,   // MaxBones
+            4,     // MaxBonesPerVertex
+            64,    // MaxBonesPerMesh
             true,  // TextureRasterSuffix
             false, // QuadMeshes
             true,  // StadiumTexturesAndModelInOneContainer
+            SKIN_PALETTE_OPCODES_ALWAYS,
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
                 { RX3_TEXFORMAT_DXT3, RX3_TEXFORMAT_DXT3 },
@@ -28,11 +31,12 @@ map<string, GameConfig> &GameConfigs() {
         )},
         { "fifa13pc", GameConfig(
             true,  // BigEndian
-            4,     // BonesPerVertex
-            255,   // MaxBones
+            4,     // MaxBonesPerVertex
+            64,    // MaxBonesPerMesh
             true,  // TextureRasterSuffix
             false, // QuadMeshes
             true,  // StadiumTexturesAndModelInOneContainer
+            SKIN_PALETTE_OPCODES_ALWAYS,
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
                 { RX3_TEXFORMAT_DXT3, RX3_TEXFORMAT_DXT3 },
@@ -51,11 +55,12 @@ map<string, GameConfig> &GameConfigs() {
         )},
         { "fifa14pc", GameConfig(
             false, // BigEndian
-            4,     // BonesPerVertex
-            255,   // MaxBones
+            4,     // MaxBonesPerVertex
+            64,    // MaxBonesPerMesh
             true,  // TextureRasterSuffix
             false, // QuadMeshes
             false, // StadiumTexturesAndModelInOneContainer
+            SKIN_PALETTE_OPCODES_ALWAYS,
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
                 { RX3_TEXFORMAT_DXT3, RX3_TEXFORMAT_DXT3 },
@@ -74,11 +79,12 @@ map<string, GameConfig> &GameConfigs() {
         )},
         { "fifa15pc", GameConfig(
             false, // BigEndian
-            4,     // BonesPerVertex
-            512,   // MaxBones
+            4,     // MaxBonesPerVertex
+            256,   // MaxBonesPerMesh
             false, // TextureRasterSuffix
             false, // QuadMeshes
             false, // StadiumTexturesAndModelInOneContainer
+            SKIN_PALETTE_OPCODES_16BIT_BONE_IDS,
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
                 { RX3_TEXFORMAT_DXT3, RX3_TEXFORMAT_DXT3 },
@@ -97,11 +103,12 @@ map<string, GameConfig> &GameConfigs() {
         )},
         { "fifa16pc", GameConfig(
             false, // BigEndian
-            4,     // BonesPerVertex
-            512,   // MaxBones
+            4,     // MaxBonesPerVertex
+            256,   // MaxBonesPerMesh
             false, // TextureRasterSuffix
             true,  // QuadMeshes
             false, // StadiumTexturesAndModelInOneContainer
+            SKIN_PALETTE_OPCODES_16BIT_BONE_IDS,
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
                 { RX3_TEXFORMAT_DXT3, RX3_TEXFORMAT_DXT3 },
@@ -124,15 +131,17 @@ map<string, GameConfig> &GameConfigs() {
 
 GameConfig::GameConfig() {}
 
-GameConfig::GameConfig(bool _BigEndian, unsigned char _BonesPerVertex, unsigned int _MaxBones, bool _TextureRasterSuffix,
-    bool _QuadMeshes, bool _StadiumTexturesAndModelInOneContainer, map<unsigned char, unsigned char> const &_TextureFormats)
+GameConfig::GameConfig(bool _BigEndian, unsigned char _MaxBonesPerVertex, unsigned int _MaxBonesPerMesh, bool _TextureRasterSuffix,
+    bool _QuadMeshes, bool _StadiumTexturesAndModelInOneContainer, eSkinPaletteOpcodesPolicty _SkinPaletteOpcodesPolicy,
+    map<unsigned char, unsigned char> const &_TextureFormats)
 {
     BigEndian = _BigEndian;
-    BonesPerVertex = _BonesPerVertex;
-    MaxBones = _MaxBones;
+    MaxBonesPerVertex = _MaxBonesPerVertex;
+    MaxBonesPerMesh = _MaxBonesPerMesh;
     TextureRasterSuffix = _TextureRasterSuffix;
     QuadMeshes = _QuadMeshes;
     StadiumTexturesAndModelInOneContainer = _StadiumTexturesAndModelInOneContainer;
+    SkinPaletteOpcodesPolicy = _SkinPaletteOpcodesPolicy;
     TextureFormats = _TextureFormats;
 }
 
@@ -145,6 +154,34 @@ Rx3Options::Rx3Options(string const &gameName) {
     exportQuads = false;
     writeHDR = true;
     writeTexMetadata = true;
+    metadata = true;
     folderOption = FOLDER_OPTION_AUTO;
     gameConfig = GameConfigs()[gameName];
+    tristrip = false;
+    precisePositions = true;
+    boneMatricesOption = BONE_MATRICES_FROM_FILE;
+}
+
+void AddMetadataToRx3(Rx3Container &rx3, path const &in, path const &out, string const &cmdLine) {
+    if (rx3.FindFirstChunk(RX3_CHUNK_METADATA))
+        return;
+    string metadata;
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::ostringstream timess;
+    timess << std::put_time(&tm, "%d-%b-%Y %H:%M:%S");
+    metadata += "<Metadata>";
+    metadata += "<Tools>RX3 Converter (rx3c), part of Rx3Tools</Tools>";
+    metadata += "<ToolsVersion>" + string(RX3C_VERSION) + "</ToolsVersion>";
+    metadata += "<ToolsCommand>" + cmdLine + "</ToolsCommand>";
+    metadata += "<TimeStamp>" + timess.str() + "</TimeStamp>";
+    //metadata += "<Author>" + "</Author>";
+    metadata += "<OriginalFileName>" + ToUTF8(out.c_str()) + "</OriginalFileName>";
+    metadata += "<SourceFile>" + ToUTF8(in.c_str()) + "</SourceFile>";
+    metadata += "</Metadata>";
+    Rx3Writer metadataWriter(rx3.AddChunk(RX3_CHUNK_METADATA));
+    metadataWriter.Put<uint32_t>(metadata.size() + 1);
+    metadataWriter.Align();
+    metadataWriter.Put(metadata);
+    metadataWriter.Align();
 }

@@ -189,11 +189,12 @@ Model ModelFromSceneContainer(Rx3Container &rx3, Rx3Options const &options) {
                     colObj.name = collisionReader.ReadString();
                     collisionReader.Skip(4);
                     auto numTriangles = collisionReader.Read<uint32_t>();
-                    colObj.firstMesh().triangles.resize(numTriangles);
+                    colObj.firstMesh().polygons.resize(numTriangles);
                     colObj.vertices.resize(numTriangles * 3);
                     for (uint32_t tri = 0; tri < numTriangles; tri++) {
+                        colObj.firstMesh().polygons[tri].resize(3);
                         for (uint32_t v = 0; v < 3; v++) {
-                            colObj.firstMesh().triangles[tri][v] = tri * 3 + v;
+                            colObj.firstMesh().polygons[tri][v] = tri * 3 + v;
                             colObj.vertices[tri * 3 + v].pos = ReadVector3(collisionReader) / 100.0f;
                         }
                     }
@@ -303,35 +304,31 @@ Model ModelFromSceneContainer(Rx3Container &rx3, Rx3Options const &options) {
                         else
                             continue;
                         Object &obj = tiers[tier];
-                        size_t vertIndex = obj.vertices.size();
-                        size_t triIndex = obj.firstMesh().triangles.size();
-                        obj.vertices.resize(vertIndex + 4);
-                        obj.firstMesh().triangles.resize(triIndex + 4);
                         const float SeatScale = 0.3f;
                         Vector3 rect[4] = {
-                        { -SeatScale, 0, 0 },
-                        { -SeatScale, SeatScale * 2, 0 },
-                        {  SeatScale, SeatScale * 2, 0 },
-                        {  SeatScale, 0, 0 }
+                            { -SeatScale, 0, 0 },
+                            { -SeatScale, SeatScale * 2, 0 },
+                            {  SeatScale, SeatScale * 2, 0 },
+                            {  SeatScale, 0, 0 }
                         };
                         Matrix4x4 mat;
                         mat.SetIdentity();
                         mat.SetRotation({ 0.0f, angle + 90.0f, 0.0f });
                         mat.SetTranslation(pos);
+                        size_t vertIndex = obj.vertices.size();
+                        obj.firstMesh().polygons.push_back({ vertIndex + 0, vertIndex + 1, vertIndex + 2, vertIndex + 3 });
                         for (size_t v = 0; v < 4; v++) {
-                            Vector3 globalPos = mat * rect[v];
-                            obj.vertices[vertIndex + v].pos.Set(globalPos[0], globalPos[1], globalPos[2]);
-                            obj.vertices[vertIndex + v].colors[0] = seatcolor;
-                            obj.vertices[vertIndex + v].colors[1] = shade;
-                            obj.vertices[vertIndex + v].colors[2] = RGBA(section0, section0, section0, 255);
-                            obj.vertices[vertIndex + v].colors[3] = RGBA(section1, section1, section1, 255);
-                            obj.vertices[vertIndex + v].colors[4] = RGBA(attendance, attendance, attendance, 255);
-                            obj.vertices[vertIndex + v].colors[5] = RGBA(nochair, nochair, nochair, 255);
-                            obj.vertices[vertIndex + v].colors[6] = cardcolors;
-                            obj.vertices[vertIndex + v].colors[7] = RGBA(crowdpattern, crowdpattern, crowdpattern, 255);
+                            auto &vert = obj.vertices.emplace_back();
+                            vert.pos = mat * rect[v];
+                            vert.colors[0] = seatcolor;
+                            vert.colors[1] = shade;
+                            vert.colors[2] = RGBA(section0, section0, section0, 255);
+                            vert.colors[3] = RGBA(section1, section1, section1, 255);
+                            vert.colors[4] = RGBA(attendance, attendance, attendance, 255);
+                            vert.colors[5] = RGBA(nochair, nochair, nochair, 255);
+                            vert.colors[6] = cardcolors;
+                            vert.colors[7] = RGBA(crowdpattern, crowdpattern, crowdpattern, 255);
                         }
-                        obj.firstMesh().triangles[triIndex] = { vertIndex + 2, vertIndex + 1, vertIndex + 0 };
-                        obj.firstMesh().triangles[triIndex + 1] = { vertIndex + 0, vertIndex + 3, vertIndex + 2 };
                     }
                     string layerNames[] = { "SeatColor", "Shade", "NeutralHomeAway", "UltraHomeAway", "Attendance", "NoChair",
                         "CardColors", "CrowdPattern" };

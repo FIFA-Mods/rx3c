@@ -5,6 +5,7 @@
 #include "Rx3Morph.h"
 #include "Rx3Skeleton.h"
 #include "half.hpp"
+#include "MeshOperations/MeshTristrip.h"
 
 using namespace memory;
 
@@ -17,6 +18,10 @@ char const *DataTypeNames[] = {
     "3u8rgb8", "4u8rgbx8", "1u16rgba4", "3u8rgba6", "4u8rgba8", "2u16", "4u16", "2u16n", "4u16n", "custom"
 };
 
+uint32_t DataTypeTotalSize[] = {
+    0, 0, 4, 4, 2, 1, 8, 8, 4, 2, 12, 12, 6, 3, 16, 16, 8, 4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 8, 4, 6, 2, 3, 4, 2, 3, 4, 4, 8, 4, 8, 0
+};
+
 DataType DataTypeIdFromName(string const &name) {
     for (size_t i = 0; i < size(DataTypeNames); i++) {
         if (name == DataTypeNames[i])
@@ -27,6 +32,12 @@ DataType DataTypeIdFromName(string const &name) {
 
 float UnpackFloatFrom10Bit(int value) {
     return (value < 0) ? float(value) / 512.0f : float(value) / 511.0f;
+}
+
+int PackFloatTo10Bit(float value) {
+    if (value < 0.0f)
+        return int(roundf(value * 512.0f));
+    return int(roundf(value * 511.0f));
 }
 
 float UnpackFloatFrom11Bit(int value) {
@@ -268,6 +279,99 @@ RGBA UnpackColor(DataType dt, const unsigned char *data) {
         (unsigned char)clamp(unpacked[2] * 255.0f, 0.0f, 255.0f));
 }
 
+uint32_t PackVector3(DataType dt, unsigned char *data, Vector3 const &vec) {
+    if (dt == dt_3f32)
+        memcpy(data, &vec, sizeof(Vector3));
+    else if (dt == dt_4f16) {
+        uint16_t buf[4];
+        buf[0] = half_float::half(vec.x).data_;
+        buf[1] = half_float::half(vec.y).data_;
+        buf[2] = half_float::half(vec.z).data_;
+        buf[3] = half_float::half(1.0f).data_;
+        memcpy(data, buf, 8);
+    }
+    else if (dt == dt_3s10n) {
+        struct _3s10n {
+            int x : 10;
+            int y : 10;
+            int z : 10;
+            int pad : 2;
+        };
+        _3s10n *dst = (_3s10n *)data;
+        dst->x = PackFloatTo10Bit(vec.x);
+        dst->y = PackFloatTo10Bit(vec.y);
+        dst->z = PackFloatTo10Bit(vec.z);
+        dst->pad = 0;
+    }
+    return DataTypeTotalSize[dt];
+}
+
+uint32_t PackVector2(DataType dt, unsigned char *data, Vector2 const &vec) {
+    if (dt == dt_2f32)
+        memcpy(data, &vec, sizeof(Vector2));
+    else if (dt == dt_2f16) {
+        uint16_t buf[2];
+        buf[0] = half_float::half(vec.x).data_;
+        buf[1] = half_float::half(vec.y).data_;
+        memcpy(data, buf, 4);
+    }
+    return DataTypeTotalSize[dt];
+}
+
+uint32_t PackBoneIndices(DataType dt, uint8_t *data, uint16_t const *indices, uint8_t numBoneSets) {
+    uint16_t lastIndex = 0;
+    for (uint8_t i = 0; i < numBoneSets * 4; i++) {
+        uint16_t indexToWrite = (indices[i] == 0) ? lastIndex : indices[i];
+        lastIndex = indexToWrite;
+        if (dt == dt_4u8)
+            data[i] = static_cast<uint8_t>(indexToWrite);
+        else if (dt == dt_4u16)
+            memcpy(data + i * 2, &indexToWrite, 2);
+    }
+    return DataTypeTotalSize[dt] * numBoneSets;
+}
+
+
+
+uint32_t PackBoneWeights(DataType dt, uint8_t *data, float const *weights, uint8_t numBoneSets) {
+    if (dt == dt_4u8n) {
+        uint32_t bonesPerVertex = numBoneSets * 4;
+        uint8_t blendWeights[8] = {};
+        int numWeights = 0;
+        for (uint32_t w = 0; w < bonesPerVertex; w++) {
+            if (weights[w] == 0.0f)
+                break;
+            blendWeights[w] = static_cast<uint8_t>(round(weights[w] * 255.0f));
+            numWeights++;
+        }
+        if (numWeights == 1)
+            blendWeights[0] = 255;
+        else {
+            int totalWeights = 0;
+            for (int w = 0; w < numWeights; w++)
+                totalWeights += blendWeights[w];
+            if (totalWeights > 255) {
+                int diff = totalWeights - 255;
+                for (int w = 0; w < diff; w++)
+                    blendWeights[numWeights - w - 1] -= 1;
+            }
+            else if (totalWeights < 255) {
+                int diff = 255 - totalWeights;
+                for (int w = 0; w < diff; w++)
+                    blendWeights[w] += 1;
+            }
+            numWeights = 0;
+            for (unsigned int w = 0; w < bonesPerVertex; w++) {
+                if (blendWeights[w] == 0)
+                    break;
+                numWeights++;
+            }
+        }
+        memcpy(data, blendWeights, bonesPerVertex);
+    }
+    return DataTypeTotalSize[dt];
+}
+
 Matrix4x4 ReadMatrix4x4(Rx3Reader &reader) {
     Matrix4x4 mat;
     for (uint32_t r = 0; r < 4; r++) {
@@ -309,7 +413,7 @@ void WriteVector3(Rx3Writer &writer, Vector3 const &v) {
 Model ReadModelFromFile(path const &filePath) {
     Model model;
     ModelOptions modelOptions;
-    modelOptions.AllowQuads = true;
+    modelOptions.AlwaysTriangulate = false;
     modelOptions.MergeMeshes = true;
     model.Read(filePath, modelOptions);
     return model;
@@ -459,7 +563,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                 uint8_t is = ibReader.Read<uint8_t>();
                 ibReader.Skip(7);
                 if (is == 1 || is == 2 || is == 4) {
-                    auto &quads = obj.meshes.emplace_back().quads;
+                    auto &quads = obj.meshes.emplace_back().polygons;
                     quads.resize(numIndices / 4);
                     for (size_t t = 0; t < quads.size(); ++t)
                         quads[t] = { ReadIndex(ibReader, is), ReadIndex(ibReader, is), ReadIndex(ibReader, is), ReadIndex(ibReader, is) };
@@ -472,7 +576,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                 uint8_t is = ibReader.Read<uint8_t>();
                 ibReader.Skip(7);
                 if (is == 1 || is == 2 || is == 4) {
-                    auto &triangles = obj.meshes.emplace_back().triangles;
+                    auto &triangles = obj.meshes.emplace_back().polygons;
                     if (primType == RX3_PRIM_TRIANGLELIST) {
                         triangles.resize(numIndices / 3);
                         for (size_t t = 0; t < triangles.size(); ++t)
@@ -484,7 +588,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                                 uint32_t i0 = ReadIndex(ibReader, is);
                                 uint32_t i1 = ReadIndex(ibReader, is);
                                 uint32_t i2 = ReadIndex(ibReader, is);
-                                array<uint32_t, 3> tri;
+                                vector<uint32_t> tri;
                                 if ((k & 1) == 0)
                                     tri = { i0, i1, i2 };
                                 else
@@ -503,79 +607,51 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
 
 Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options) {
     using namespace helper::rx3model;
+    auto ibs = rx3.FindAllChunks(RX3_CHUNK_INDEX_BUFFER);
+    auto qbs = rx3.FindAllChunks(RX3_CHUNK_QUAD_INDEX_BUFFER);
+    auto vbs = rx3.FindAllChunks(RX3_CHUNK_VERTEX_BUFFER);
+    auto vertexFormats = rx3.FindAllChunks(RX3_CHUNK_VERTEX_FORMAT);
+    auto meshes = rx3.FindAllChunks(RX3_CHUNK_SIMPLE_MESH);
+    auto animationSkin = rx3.FindFirstChunk(RX3_CHUNK_ANIMATION_SKIN);
+    if (ibs.empty() || ibs.size() != vbs.size() || ibs.size() != vertexFormats.size() || ibs.size() != meshes.size())
+        return Model();
     Model model;
-    auto indexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_INDEX_BUFFER);
-    auto quadBufferChunks = rx3.FindAllChunks(RX3_CHUNK_QUAD_INDEX_BUFFER);
-    auto vertexBufferChunks = rx3.FindAllChunks(RX3_CHUNK_VERTEX_BUFFER);
-    auto vertexFormatChunks = rx3.FindAllChunks(RX3_CHUNK_VERTEX_FORMAT);
-    auto meshChunks = rx3.FindAllChunks(RX3_CHUNK_SIMPLE_MESH);
-    auto animationSkinChunk = rx3.FindFirstChunk(RX3_CHUNK_ANIMATION_SKIN);
-    auto skeletonChunk = rx3.FindFirstChunk(RX3_CHUNK_SKELETON);
-    vector<string> boneNames;
-    Rx3Container skeletonRx3;
-    if (!indexBufferChunks.empty() && indexBufferChunks.size() == vertexBufferChunks.size() &&
-        indexBufferChunks.size() == vertexFormatChunks.size()) {
-        if (animationSkinChunk && !options.skeletonPath.empty() && exists(options.skeletonPath)) {
-            skeletonRx3.Load(options.skeletonPath);
-            //auto skeletonAnimationSkinChunk = skeletonRx3.FindFirstChunk(RX3_CHUNK_ANIMATION_SKIN);
-            //if (skeletonAnimationSkinChunk)
-            //    animationSkinChunk = skeletonAnimationSkinChunk;
-            auto skeletonSkeletonChunk = skeletonRx3.FindFirstChunk(RX3_CHUNK_SKELETON);
-            if (skeletonSkeletonChunk)
-                skeletonChunk = skeletonSkeletonChunk;
-            boneNames = ExtractNamesFromRx3(skeletonRx3, RX3_CHUNK_BONE_NAME);
-        }
-        bool hasSkeleton = animationSkinChunk && skeletonChunk;
-        vector<string> meshNames = ExtractNamesFromRx3(rx3, RX3_CHUNK_SIMPLE_MESH);
-        for (auto &name : meshNames) {
-            if (name.ends_with(".FxRenderableSimple"))
-                name = name.substr(0, name.length() - strlen(".FxRenderableSimple"));
-        }
-        auto numMeshes = indexBufferChunks.size();
-        uint32_t numBones = 0;
-        vector<uint32_t> primTypes;
-        for (auto const &gt : meshChunks) {
-            Rx3Reader gtReader(gt);
-            primTypes.push_back(gtReader.Read<uint16_t>());
-        }
-        model.objects.resize(numMeshes);
-        if (hasSkeleton) {
-            Rx3Reader boneMatricesReader(animationSkinChunk);
-            boneMatricesReader.Skip(4);
-            numBones = boneMatricesReader.Read<uint32_t>();
-            boneMatricesReader.Skip(8);
-            if (numBones > 0) {
-                auto &bones = model.skeleton.bones;
-                bones.resize(numBones);
-                for (uint32_t b = 0; b < numBones; b++)
-                    bones[b].name = (b < boneNames.size()) ? boneNames[b] : "bone_" + to_string(b);
-                vector<Matrix4x4> boneInversedMatrices(numBones);
-                for (uint32_t b = 0; b < numBones; b++) {
-                    ReadMatrix4x4(boneMatricesReader, boneInversedMatrices[b]);
-                    for (uint32_t j = 0; j < 3; j++)
-                        boneInversedMatrices[b].m[3][j] /= 100.0f;
-                    bones[b].properties["ibm"] = boneInversedMatrices[b].ToString();
-                    bones[b].matrix = boneInversedMatrices[b].Inversed();
-                }
-                Rx3Reader skeletonReader(skeletonChunk);
-                skeletonReader.Skip(16);
-                for (uint32_t b = 0; b < numBones; b++) {
-                    int16_t parentIndex = skeletonReader.Read<int16_t>();
-                    if (parentIndex >= 0 && parentIndex < (int32_t)bones.size()) {
-                        bones[b].parent = bones[parentIndex].name;
+    if (animationSkin && !options.targetSkeleton.bones.empty()) {
+        Rx3Reader animationSkinReader(animationSkin);
+        animationSkinReader.Skip(4);
+        uint32_t numBones = animationSkinReader.Read<uint32_t>();
+        animationSkinReader.Skip(8);
+        if (numBones == options.targetSkeleton.bones.size()) {
+            model.skeleton = options.targetSkeleton;
+            auto &bones = model.skeleton.bones;
+            vector<Matrix4x4> boneInversedMatrices(numBones);
+            for (uint32_t b = 0; b < numBones; b++) {
+                ReadMatrix4x4(animationSkinReader, boneInversedMatrices[b]);
+                bones[b].properties["ibm"] = boneInversedMatrices[b];
+                for (uint32_t j = 0; j < 3; j++)
+                    boneInversedMatrices[b].m[3][j] /= 100.0f;
+                bones[b].matrix = boneInversedMatrices[b].Inversed();
+            }
+            for (uint32_t b = 0; b < numBones; b++) {
+                if (!bones[b].parent.empty()) {
+                    int16_t parentIndex = model.GetBoneIndex(bones[b].parent);
+                    if (parentIndex >= 0 && parentIndex < (int32_t)bones.size())
                         bones[b].matrix = boneInversedMatrices[parentIndex] * bones[b].matrix;
-                    }
                 }
             }
         }
-        for (size_t i = 0; i < numMeshes; i++) {
-            auto &obj = model.objects[i];
-            obj.name = i < meshNames.size() ? meshNames[i] : "object_" + to_string(i);
-            int primType = i < primTypes.size() ? primTypes[i] : RX3_PRIM_TRIANGLELIST;
-            auto quadBuffer = quadBufferChunks.size() == indexBufferChunks.size() ? quadBufferChunks[i] : nullptr;
-            SetupObjectMesh(obj, vertexFormatChunks[i], vertexBufferChunks[i], indexBufferChunks[i], quadBuffer, primType,
-                numBones, options);
-        }
+    }
+    vector<string> meshNames = ExtractNamesFromRx3(rx3, RX3_CHUNK_SIMPLE_MESH);
+    model.objects.resize(ibs.size());
+    for (size_t i = 0; i < ibs.size(); i++) {
+        auto &obj = model.objects[i];
+        obj.name = i < meshNames.size() ? meshNames[i] : "object_" + to_string(i);
+        if (obj.name.ends_with(".FxRenderableSimple"))
+            obj.name = obj.name.substr(0, obj.name.length() - strlen(".FxRenderableSimple"));
+        Rx3Reader meshChunkReader(meshes[i]);
+        uint16_t primType = meshChunkReader.Read<uint16_t>();
+        auto qb = qbs.size() == ibs.size() ? qbs[i] : nullptr;
+        SetupObjectMesh(obj, vertexFormats[i], vbs[i], ibs[i], qb, primType, model.skeleton.bones.size(), options);
     }
     return model;
 }
@@ -585,19 +661,350 @@ Model ModelFromRX3(Rx3Container &rx3, Rx3Options const &options) {
         return ModelFromSceneContainer(rx3, options);
     else if (rx3.FindFirstChunk(RX3_CHUNK_SIMPLE_MESH))
         return ModelFromSimpleMeshContainer(rx3, options);
-    else if (rx3.FindFirstChunk(RX3_CHUNK_MORPH_INDEXED) && !options.baseModel.empty())
-        return ModelFromMorphTargetsContainer(rx3, options.baseModel, options);
+    else if (rx3.FindFirstChunk(RX3_CHUNK_MORPH_INDEXED) && !options.baseModel.objects.empty())
+        return ModelFromMorphTargetsContainer(rx3, options);
     else if (rx3.FindFirstChunk(RX3_CHUNK_SKELETON))
         return ModelFromSkeletonContainer(rx3, options);
     return Model();
 }
 
-void ModelToSimpleMeshContainer(Model const &model, path const &rx3path, Rx3Options const &options) {
-    Rx3Container rx3;
-    // ibbatch, quadibbatch, vertexformat's, nametable, ib's, qib's, boneremap's, vb's, animationskin's,
-    // simplemesh's, adjacency's
-    vector<vector<unsigned char>> vbs, ibs, boneremap;
+void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, path const &rx3path, Rx3Options const &options) {
+    using namespace helper::rx3model;
+    Model model = source;
+    bool hasSkeleton = !model.skeleton.bones.empty() && options.targetSkeleton.bones.empty();
+    bool hasQuads = false;
+    for (auto &o : model.objects) {
+        o.MergeMeshes();
+        for (auto const &p : o.firstMesh().polygons) {
+            if (p.size() == 4) {
+                hasQuads = true;
+                break;
+            }
+        }
+    }
+    Rx3Container rx3(options.gameConfig.BigEndian);
+    // ibbatch, quadibbatch, vertexformat's, nametable, ib's, qib's, boneremap's, vb's, animationskin's, simplemesh's, adjacency's
+    vector<vector<uint8_t>> vbs, ibs, qibs, boneremaps, adjacencies;
+    vector<Rx3PrimitiveType> primTypes;
+    vector<string> vertexFormats;
+    vector<pair<uint32_t, string>> nametable;
+    vector<Matrix4x4> ibms;
+    DataType posDataType = options.precisePositions ? dt_3f32 : dt_4f16;
+    DataType bonesDataType = (model.skeleton.bones.size() > 255) ? dt_4u8 : dt_4u16;
+    uint8_t numBoneSets = 0;
 
+    // calculate skeleton
+    if (hasSkeleton) {
+        bool adjustMatrices = false;
+        if (options.boneMatricesOption == BONE_MATRICES_FROM_FILE) { // use skeleton from FBX
+            ibms = ComputeBoneInverseBindMatricesForModel(model, options.targetSkeleton);
+            adjustMatrices = true;
+        }
+        if (options.boneMatricesOption == BONE_MATRICES_FROM_BASE_MODEL) {
+            ibms = GetSourceBoneInverseBindMatrices(options.baseModel.skeleton);
+            adjustMatrices = false; // bone matrices are taken from the reference RX3 file as is
+        }
+        if (ibms.empty() || ibms.size() != options.targetSkeleton.bones.size()) { // BONE_MATRICES_FROM_SKELETON and also a fallback
+            ibms = GetSourceBoneInverseBindMatrices(options.targetSkeleton);
+            adjustMatrices = true; // rows in matrices from skeleton file may end with 1
+        }
+        if (adjustMatrices) {
+            for (auto &ibm : ibms) {
+                for (size_t r = 0; r < 4; r++)
+                    ibm.m[r][3] = 0.0f;
+            }
+        }
+        // resolve vertex buffer bone indices
+        map<string, uint16_t> targetBoneIndices;
+        for (uint16_t boneIndex = 0; boneIndex < options.targetSkeleton.bones.size(); boneIndex++)
+            targetBoneIndices[options.targetSkeleton.bones[boneIndex].name] = boneIndex;
+        uint32_t maxBonesPerVertex = 0;
+        for (auto &o : model.objects) {
+            if (NumBones(o.vertexFormat) == 0) {
+                o.SetBone(0);
+                maxBonesPerVertex = max(1u, maxBonesPerVertex);
+            }
+            else {
+                for (auto &v : o.vertices) {
+                    vector<pair<uint16_t, float>> usedBones;
+                    for (size_t b = 0; b < NumBones(o.vertexFormat); b++) {
+                        if (v.boneWeights[b] != 0.0f && v.boneIndices[b] < model.skeleton.bones.size()) {
+                            auto targetBoneIndex = targetBoneIndices.find(model.skeleton.bones[v.boneIndices[b]].name);
+                            if (targetBoneIndex != targetBoneIndices.end())
+                                usedBones.emplace_back((*targetBoneIndex).second, v.boneWeights[b]);
+                        }
+                    }
+                    if (!usedBones.empty()) {
+                        if (usedBones.size() == 1)
+                            usedBones[0].second = 1.0f;
+                        else {
+                            std::stable_sort(usedBones.begin(), usedBones.end(),
+                            [](pair<uint16_t, float> const &a, pair<uint16_t, float> const &b) {
+                                return a.second > b.second;
+                            });
+                        }
+                    }
+                    if (usedBones.empty())
+                        usedBones.emplace_back(0, 1.0f);
+                    for (size_t b = 0; b < NumBones(o.vertexFormat); b++) {
+                        if (b < usedBones.size()) {
+                            v.boneIndices[b] = usedBones[b].first;
+                            v.boneWeights[b] = usedBones[b].second;
+                        }
+                        else {
+                            v.boneIndices[b] = 0;
+                            v.boneWeights[b] = 0.0f;
+                        }
+                    }
+                    maxBonesPerVertex = max(usedBones.size(), maxBonesPerVertex);
+                }
+            }
+        }
+        numBoneSets = maxBonesPerVertex > 4 ? 2 : 1;
+    }
+
+    // 2f16, 4f16, 3f32, 4u8n, 4u8, 4u16, 3s10n
+    auto AddVertexDecl = [](string &dst, char usage, unsigned char usageIndex, unsigned int offset, DataType dataType) {
+        if (!dst.empty())
+            dst += " ";
+        dst += Format("%c%X:%02X:00:0001:%s", usage, usageIndex, DataTypeNames[dataType]);
+        return DataTypeTotalSize[dataType];
+    };
+
+    for (auto const &o : model.objects) {
+        if (!o.meshes.empty() && !o.vertices.empty() && !o.firstMesh().polygons.empty()) {
+            auto mesh = o.firstMesh();
+            uint32_t indexSize = o.vertices.size() > 0xFFFF ? 4 : 2;
+            nametable.emplace_back(RX3_CHUNK_SIMPLE_MESH, o.name + ".FxRenderableSimple");
+            string vf;
+            uint32_t vertexOffset = AddVertexDecl(vf, 'p', 0, 0, posDataType);
+            if (o.vertexFormat & V_Normal)
+                vertexOffset += AddVertexDecl(vf, 'n', 0, vertexOffset, dt_3s10n);
+            if (o.vertexFormat & V_Tangent)
+                vertexOffset += AddVertexDecl(vf, 'g', 0, vertexOffset, dt_3s10n);
+            if (o.vertexFormat & V_Binormal)
+                vertexOffset += AddVertexDecl(vf, 'b', 0, vertexOffset, dt_3s10n);
+            for (uint8_t t = 0; t < NumTexCoords(o.vertexFormat); t++)
+                vertexOffset += AddVertexDecl(vf, 't', t, vertexOffset, dt_2f16);
+            if (numBoneSets > 0) {
+                for (uint8_t set = 0; set < numBoneSets; set++)
+                    vertexOffset += AddVertexDecl(vf, 'i', set, vertexOffset, bonesDataType);
+                for (uint8_t set = 0; set < numBoneSets; set++)
+                    vertexOffset += AddVertexDecl(vf, 'w', set, vertexOffset, dt_4u8n);
+            }
+            vertexFormats.push_back(vf);
+            uint32_t vertexStride = vertexOffset;
+            vector<uint8_t> vertexBuffer(o.vertices.size() * vertexStride);
+            uint32_t vbOffset = 0;
+            for (size_t v = 0; v < o.vertices.size(); v++) {
+                vbOffset += PackVector3(posDataType, &vertexBuffer[vbOffset], o.vertices[v].pos * 100.0f);
+                if (o.vertexFormat & V_Normal)
+                    vbOffset += PackVector3(dt_3s10n, &vertexBuffer[vbOffset], o.vertices[v].normal);
+                if (o.vertexFormat & V_Tangent)
+                    vbOffset += PackVector3(dt_3s10n, &vertexBuffer[vbOffset], o.vertices[v].tangent);
+                if (o.vertexFormat & V_Binormal)
+                    vbOffset += PackVector3(dt_3s10n, &vertexBuffer[vbOffset], o.vertices[v].binormal);
+                for (size_t t = 0; t < NumTexCoords(o.vertexFormat); t++) {
+                    vbOffset += PackVector2(dt_2f16, &vertexBuffer[vbOffset],
+                        Vector2(o.vertices[v].uv[t].x, 1.0f - o.vertices[v].uv[t].y));
+                }
+                if (numBoneSets > 0) {
+                    vbOffset += PackBoneIndices(bonesDataType, &vertexBuffer[vbOffset], o.vertices[v].boneIndices, numBoneSets);
+                    vbOffset += PackBoneWeights(dt_4u8n, &vertexBuffer[vbOffset], o.vertices[v].boneWeights, numBoneSets);
+                }
+            }
+            // vb
+            Rx3Writer vbWriter(vbs.emplace_back());
+            vbWriter.Put<uint32_t>(0);
+            vbWriter.Put<uint32_t>(o.vertices.size());
+            vbWriter.Put<uint32_t>(vertexStride);
+            vbWriter.Put<uint32_t>(1);
+            vbWriter.Align();
+            vbWriter.Put(vertexBuffer.data(), vertexBuffer.size());
+            vbWriter.AlignAndUpdateTotalSize();
+            if (hasQuads) {
+                // qib
+                mesh.LeaveTrisAndQuads(o.vertices);
+                Rx3Writer qibWriter(qibs.emplace_back());
+                qibWriter.Put<uint32_t>(0);
+                qibWriter.Put<uint32_t>(mesh.polygons.size() * 4);
+                qibWriter.Put<uint32_t>(indexSize);
+                qibWriter.Align();
+                for (auto const &p : mesh.polygons) {
+                    array<uint32_t, 4> quad = { p[0], p[1], p[2], p.size() == 4 ? p[3] : p[2] };
+                    for (auto index : quad)
+                        indexSize == 4 ? qibWriter.Put<uint32_t>(index) : qibWriter.Put<uint16_t>(index);
+                }
+                qibWriter.AlignAndUpdateTotalSize();
+                // adjacency
+                struct AdjacencyRecord {
+                    uint32_t count = 0;
+                    array<uint32_t, 15> quadIndices{};
+                };
+                vector<AdjacencyRecord> records(o.vertices.size());
+                uint32_t quadIndex = 0;
+                for (auto const &p : mesh.polygons) {
+                    std::array<uint32_t, 4> quad = { p[0], p[1], p[2], p.size() == 4 ? p[3] : p[2] };
+                    for (size_t i = 0; i < 4; i++) {
+                        uint32_t vi = quad[i];
+                        bool seen = false;
+                        for (size_t j = 0; j < i; j++)
+                            if (quad[j] == vi) { seen = true; break; }
+                        if (seen) continue;
+                        auto &rec = records[vi];
+                        if (rec.count < 15)
+                            rec.quadIndices[rec.count++] = quadIndex;
+                    }
+                    quadIndex++;
+                }
+                constexpr float kWeldEpsilonSq = 0.00000011920929f;
+                for (size_t a = 0; a < o.vertices.size(); a++) {
+                    for (size_t b = a + 1; b < o.vertices.size(); b++) {
+                        auto delta = o.vertices[a].pos - o.vertices[b].pos;
+                        float distSq = Dot(delta, delta);
+                        if (distSq > kWeldEpsilonSq)
+                            continue;
+                        auto &recA = records[a];
+                        auto &recB = records[b];
+                        uint32_t origCountA = recA.count;
+                        uint32_t origCountB = recB.count;
+                        for (uint32_t i = 0; (i < origCountB && recA.count < 15); i++)
+                            recA.quadIndices[recA.count++] = recB.quadIndices[i];
+                        for (uint32_t i = 0; (i < origCountA && recB.count < 15); i++)
+                            recB.quadIndices[recB.count++] = recA.quadIndices[i];
+                    }
+                }
+                Rx3Writer adjacencyWriter(adjacencies.emplace_back());
+                adjacencyWriter.Put<uint32_t>(0);
+                adjacencyWriter.Align();
+                for (auto const &rec : records) {
+                    adjacencyWriter.Put<uint32_t>(rec.count);
+                    for (uint32_t i = 0; i < 15; i++)
+                        adjacencyWriter.Put<uint32_t>(i < rec.count ? rec.quadIndices[i] : 0);
+                }
+                adjacencyWriter.AlignAndUpdateTotalSize();
+            }
+            // ib
+            mesh.Triangulate(o.vertices);
+            Rx3Writer ibWriter(ibs.emplace_back());
+            ibWriter.Put<uint32_t>(0);
+            vector<uint16_t> tristrips;
+            if (options.tristrip && o.vertices.size() < 0xFFFF)
+                tristrips = MeshTristrip::GenerateTristrips(mesh.polygons);
+            if (!tristrips.empty()) {
+                ibWriter.Put(tristrips.size());
+                ibWriter.Put(indexSize);
+                ibWriter.Align();
+                for (uint16_t index : tristrips)
+                    ibWriter.Put<uint16_t>(index);
+                primTypes.push_back(RX3_PRIM_TRIANGLESTRIP);
+            }
+            else {
+                ibWriter.Put(mesh.polygons.size() * 3);
+                ibWriter.Put(indexSize);
+                ibWriter.Align();
+                for (auto const &p : mesh.polygons) {
+                    array<uint32_t, 3> tri = { p[0], p[1], p[2] };
+                    for (auto index : tri)
+                        indexSize == 4 ? ibWriter.Put<uint32_t>(index) : ibWriter.Put<uint16_t>(index);
+                }
+                primTypes.push_back(RX3_PRIM_TRIANGLELIST);
+            }
+            ibWriter.AlignAndUpdateTotalSize();
+            // boneremap
+            //if (hasSkeleton) {
+            //    Rx3Writer boneRemapWriter(boneremaps.emplace_back());
+            //    boneRemapWriter.Put<uint32_t>(0);
+            //    if (meshBones.size() > options.gameConfig.MaxBonesPerMesh) {
+            //        
+            //    }
+            //    boneRemapWriter.Put<uint8_t>(unsigned char(meshBones.size()));
+            //    boneRemapWriter.Align();
+            //    vector<unsigned char> boneRemapTable(256, 0);
+            //    for (unsigned int boneRemapIndex = 0; boneRemapIndex < meshBones.size(); boneRemapIndex++)
+            //        boneRemapTable[meshBones[boneRemapIndex]] = boneRemapIndex;
+            //    boneRemapWriter.Put(boneRemapTable.data(), boneRemapTable.size());
+            //    boneRemapWriter.Align();
+            //    vector<unsigned char> usedBonesTable(256, 0);
+            //    for (unsigned int boneRemapIndex = 0; boneRemapIndex < meshBones.size(); boneRemapIndex++)
+            //        usedBonesTable[boneRemapIndex] = meshBones[boneRemapIndex];
+            //    boneRemapWriter.Put(usedBonesTable.data(), usedBonesTable.size());
+            //    boneRemapWriter.AlignAndUpdateTotalSize();
+            //}
+        }
+    }
+
+    // ibbatch
+    Rx3Writer ibBatchWriter(rx3.AddChunk(RX3_CHUNK_INDEX_BUFFER_BATCH));
+    ibBatchWriter.Put<uint32_t>(ibs.size());
+    ibBatchWriter.Align();
+    for (auto const &ib : ibs)
+        ibBatchWriter.Put(ib.data(), 16);
+    // quadibbatch
+    if (!qibs.empty()) {
+        Rx3Writer qibBatchWriter(rx3.AddChunk(RX3_CHUNK_QUAD_INDEX_BUFFER_BATCH));
+        qibBatchWriter.Put<uint32_t>(qibs.size());
+        qibBatchWriter.Align();
+        for (auto const &qib : qibs)
+            qibBatchWriter.Put(qib.data(), 16);
+    }
+    // vertexformat's
+    for (auto const &vf : vertexFormats) {
+        Rx3Writer vertexFormatWriter(rx3.AddChunk(RX3_CHUNK_VERTEX_FORMAT));
+        vertexFormatWriter.Put<uint32_t>(0);
+        vertexFormatWriter.Put<uint32_t>(vf.size() + 1);
+        vertexFormatWriter.Align();
+        vertexFormatWriter.Put(vf);
+        vertexFormatWriter.AlignAndUpdateTotalSize();
+    }
+    // nametable
+    AddNamesChunkToRx3(rx3, nametable);
+    // ib's
+    for (auto const &ib : ibs) {
+        Rx3Writer ibWriter(rx3.AddChunk(RX3_CHUNK_INDEX_BUFFER));
+        ibWriter.Put(ib.data(), ib.size());
+    }
+    // qib's
+    for (auto const &qib : qibs) {
+        Rx3Writer qibWriter(rx3.AddChunk(RX3_CHUNK_QUAD_INDEX_BUFFER));
+        qibWriter.Put(qib.data(), qib.size());
+    }
+    // boneremap's
+    for (auto const &boneremap : boneremaps) {
+        Rx3Writer boneremapWriter(rx3.AddChunk(RX3_CHUNK_BONE_REMAP));
+        boneremapWriter.Put(boneremap.data(), boneremap.size());
+    }
+    // vb's
+    for (auto const &vb : vbs) {
+        Rx3Writer vbWriter(rx3.AddChunk(RX3_CHUNK_VERTEX_BUFFER));
+        vbWriter.Put(vb.data(), vb.size());
+    }
+    // animationskin's
+    if (!ibms.empty()) {
+        for (auto const &ib : ibs) {
+            Rx3Writer animationSkinWriter(rx3.AddChunk(RX3_CHUNK_ANIMATION_SKIN));
+            animationSkinWriter.Put<uint32_t>(0);
+            animationSkinWriter.Put<uint32_t>(ibms.size());
+            animationSkinWriter.Align();
+            for (auto const &ibm : ibms)
+                WriteMatrix4x4(animationSkinWriter, ibm);
+            animationSkinWriter.AlignAndUpdateTotalSize();
+        }
+    }
+    // simplemesh's
+    for (auto pt : primTypes) {
+        Rx3Writer meshWriter(rx3.AddChunk(RX3_CHUNK_SIMPLE_MESH));
+        meshWriter.Put<uint16_t>(pt);
+        meshWriter.Align();
+    }
+    // adjacency's
+    for (auto const &adjacency : adjacencies) {
+        Rx3Writer adjacencyWriter(rx3.AddChunk(RX3_CHUNK_ADJACENCY));
+        adjacencyWriter.Put(adjacency.data(), adjacency.size());
+    }
+    if (options.metadata)
+        AddMetadataToRx3(rx3, sourcePath, rx3path, options.cmdLine);
+    rx3.Save(rx3path);
 }
 
 void ExtractModelFromRX3(Rx3Container &container, path const &outputDir, Rx3Options const &rx3options) {
@@ -605,7 +1012,10 @@ void ExtractModelFromRX3(Rx3Container &container, path const &outputDir, Rx3Opti
     if (!exists(outputDir))
         create_directories(outputDir);
     bool fbx = m.IsSkeleton() || m.HasShapeKeys() || rx3options.modelFormat != "obj";
-    m.Write(outputDir / (container.mName + (fbx ? ".fbx" : ".obj")), rx3options.modelFormat == "fbxascii");
+    ModelOptions options;
+    options.AlwaysTriangulate = false;
+    options.FbxAscii = rx3options.modelFormat == "fbxascii";
+    m.Write(outputDir / (container.mName + (fbx ? ".fbx" : ".obj")), options);
 }
 
 Model ReadModelFromRX3(path const &rx3path, Rx3Options rx3options) {
