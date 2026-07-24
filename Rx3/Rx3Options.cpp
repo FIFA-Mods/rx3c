@@ -79,7 +79,7 @@ map<string, GameConfig> &GameConfigs() {
         )},
         { "fifa15pc", GameConfig(
             false, // BigEndian
-            4,     // MaxBonesPerVertex
+            8,     // MaxBonesPerVertex
             256,   // MaxBonesPerMesh
             false, // TextureRasterSuffix
             false, // QuadMeshes
@@ -103,7 +103,7 @@ map<string, GameConfig> &GameConfigs() {
         )},
         { "fifa16pc", GameConfig(
             false, // BigEndian
-            4,     // MaxBonesPerVertex
+            8,     // MaxBonesPerVertex
             256,   // MaxBonesPerMesh
             false, // TextureRasterSuffix
             true,  // QuadMeshes

@@ -6,6 +6,7 @@
 #include "Rx3Skeleton.h"
 #include "half.hpp"
 #include "MeshOperations/MeshTristrip.h"
+#include "MeshOperations/MeshSkinning.h"
 
 using namespace memory;
 
@@ -671,17 +672,7 @@ Model ModelFromRX3(Rx3Container &rx3, Rx3Options const &options) {
 void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, path const &rx3path, Rx3Options const &options) {
     using namespace helper::rx3model;
     Model model = source;
-    bool hasSkeleton = !model.skeleton.bones.empty() && options.targetSkeleton.bones.empty();
-    bool hasQuads = false;
-    for (auto &o : model.objects) {
-        o.MergeMeshes();
-        for (auto const &p : o.firstMesh().polygons) {
-            if (p.size() == 4) {
-                hasQuads = true;
-                break;
-            }
-        }
-    }
+    model.MergeMeshes();
     Rx3Container rx3(options.gameConfig.BigEndian);
     // ibbatch, quadibbatch, vertexformat's, nametable, ib's, qib's, boneremap's, vb's, animationskin's, simplemesh's, adjacency's
     vector<vector<uint8_t>> vbs, ibs, qibs, boneremaps, adjacencies;
@@ -690,8 +681,20 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
     vector<pair<uint32_t, string>> nametable;
     vector<Matrix4x4> ibms;
     DataType posDataType = options.precisePositions ? dt_3f32 : dt_4f16;
+    bool hasSkeleton = !model.skeleton.bones.empty() && options.targetSkeleton.bones.empty();
     DataType bonesDataType = (model.skeleton.bones.size() > 255) ? dt_4u8 : dt_4u16;
+    bool boneRemapModeSwitch = options.gameConfig.SkinPaletteOpcodesPolicy == SKIN_PALETTE_OPCODES_ALWAYS
+        || bonesDataType == dt_4f16;
     uint8_t numBoneSets = 0;
+    bool hasQuads = false;
+    for (auto &o : model.objects) {
+        for (auto const &p : o.firstMesh().polygons) {
+            if (p.size() == 4) {
+                hasQuads = true;
+                break;
+            }
+        }
+    }
 
     // calculate skeleton
     if (hasSkeleton) {
@@ -714,52 +717,11 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
                     ibm.m[r][3] = 0.0f;
             }
         }
-        // resolve vertex buffer bone indices
-        map<string, uint16_t> targetBoneIndices;
-        for (uint16_t boneIndex = 0; boneIndex < options.targetSkeleton.bones.size(); boneIndex++)
-            targetBoneIndices[options.targetSkeleton.bones[boneIndex].name] = boneIndex;
-        uint32_t maxBonesPerVertex = 0;
-        for (auto &o : model.objects) {
-            if (NumBones(o.vertexFormat) == 0) {
-                o.SetBone(0);
-                maxBonesPerVertex = max(1u, maxBonesPerVertex);
-            }
-            else {
-                for (auto &v : o.vertices) {
-                    vector<pair<uint16_t, float>> usedBones;
-                    for (size_t b = 0; b < NumBones(o.vertexFormat); b++) {
-                        if (v.boneWeights[b] != 0.0f && v.boneIndices[b] < model.skeleton.bones.size()) {
-                            auto targetBoneIndex = targetBoneIndices.find(model.skeleton.bones[v.boneIndices[b]].name);
-                            if (targetBoneIndex != targetBoneIndices.end())
-                                usedBones.emplace_back((*targetBoneIndex).second, v.boneWeights[b]);
-                        }
-                    }
-                    if (!usedBones.empty()) {
-                        if (usedBones.size() == 1)
-                            usedBones[0].second = 1.0f;
-                        else {
-                            std::stable_sort(usedBones.begin(), usedBones.end(),
-                            [](pair<uint16_t, float> const &a, pair<uint16_t, float> const &b) {
-                                return a.second > b.second;
-                            });
-                        }
-                    }
-                    if (usedBones.empty())
-                        usedBones.emplace_back(0, 1.0f);
-                    for (size_t b = 0; b < NumBones(o.vertexFormat); b++) {
-                        if (b < usedBones.size()) {
-                            v.boneIndices[b] = usedBones[b].first;
-                            v.boneWeights[b] = usedBones[b].second;
-                        }
-                        else {
-                            v.boneIndices[b] = 0;
-                            v.boneWeights[b] = 0.0f;
-                        }
-                    }
-                    maxBonesPerVertex = max(usedBones.size(), maxBonesPerVertex);
-                }
-            }
-        }
+        model.RetargetSkeleton(options.targetSkeleton);
+        model.LimitBonesPerVertex(options.gameConfig.MaxBonesPerVertex);
+        uint8_t maxBonesPerVertex = 0;
+        for (auto &o : model.objects)
+            maxBonesPerVertex = max<uint8_t>(NumBones(o.vertexFormat), maxBonesPerVertex);
         numBoneSets = maxBonesPerVertex > 4 ? 2 : 1;
     }
 
@@ -913,22 +875,52 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
             ibWriter.AlignAndUpdateTotalSize();
             // boneremap
             //if (hasSkeleton) {
+            //    vector<uint8_t> skinPalette;
+            //    set<uint16_t> usedBones;
+            //    for (auto const &v : o.vertices) {
+            //        auto bones = MeshSkinning::GetVertexBones(v, 4); // always use 4 bones, no matter how many are actually there
+            //        bool lastBone16bit = false;
+            //        for (auto bi = bones.rbegin(); bi != bones.rend(); bi++) {
+            //            uint16_t boneIndex = (*bi).first;
+            //            uint8_t boneIndex8bit = boneIndex & 0xFF;
+            //            if (std::find(skinPalette.begin(), skinPalette.end(), boneIndex8bit) == skinPalette.end()) {
+            //
+            //            }
+            //            bool isBone16bit = boneIndex > 255;
+            //            if (boneRemapModeSwitch) {
+            //                if (skinPalette.empty() || lastBone16bit != isBone16bit) {
+            //                    if (std::find(skinPalette.begin(), skinPalette.end(), isBone16bit) == skinPalette.end()) {
+            //                        skinPalette.push_back(isBone16bit);
+            //                        lastBone16bit = isBone16bit;
+            //                    }
+            //                }
+            //            }
+            //            
+            //            
+            //                skinPalette.push_back(boneIndex8bit);
+            //                lastBone16bit = isBone16bit;
+            //            }
+            //            usedBones.insert(boneIndex);
+            //        }
+            //    }
+            //    if (skinPalette.size() > 255)
+            //        skinPalette.resize(255);
+            //    if (usedBones.size() > options.gameConfig.MaxBonesPerMesh) {
+            //        // TODO: error
+            //    }
             //    Rx3Writer boneRemapWriter(boneremaps.emplace_back());
             //    boneRemapWriter.Put<uint32_t>(0);
-            //    if (meshBones.size() > options.gameConfig.MaxBonesPerMesh) {
-            //        
-            //    }
-            //    boneRemapWriter.Put<uint8_t>(unsigned char(meshBones.size()));
+            //    boneRemapWriter.Put<uint8_t>(skinPalette.size());
             //    boneRemapWriter.Align();
-            //    vector<unsigned char> boneRemapTable(256, 0);
-            //    for (unsigned int boneRemapIndex = 0; boneRemapIndex < meshBones.size(); boneRemapIndex++)
-            //        boneRemapTable[meshBones[boneRemapIndex]] = boneRemapIndex;
+            //    vector<uint8_t> boneRemapTable(256, 0);
+            //    for (uint8_t b = 0; b < skinPalette.size(); b++)
+            //        boneRemapTable[skinPalette[b]] = b;
             //    boneRemapWriter.Put(boneRemapTable.data(), boneRemapTable.size());
             //    boneRemapWriter.Align();
-            //    vector<unsigned char> usedBonesTable(256, 0);
-            //    for (unsigned int boneRemapIndex = 0; boneRemapIndex < meshBones.size(); boneRemapIndex++)
-            //        usedBonesTable[boneRemapIndex] = meshBones[boneRemapIndex];
-            //    boneRemapWriter.Put(usedBonesTable.data(), usedBonesTable.size());
+            //    vector<uint8_t> skinPaletteTable(256, 0);
+            //    for (uint8_t b = 0; b < skinPalette.size(); b++)
+            //        skinPaletteTable[b] = skinPalette[b];
+            //    boneRemapWriter.Put(skinPaletteTable.data(), skinPaletteTable.size());
             //    boneRemapWriter.AlignAndUpdateTotalSize();
             //}
         }

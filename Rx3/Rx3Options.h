@@ -26,7 +26,6 @@ struct TexFormatTarget {
 
 enum eSkinPaletteOpcodesPolicty {
     SKIN_PALETTE_OPCODES_ALWAYS,
-    SKIN_PALETTE_OPCODES_NEVER,
     SKIN_PALETTE_OPCODES_16BIT_BONE_IDS
 };
 

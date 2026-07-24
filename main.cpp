@@ -10,6 +10,7 @@
 #include "TextFileTable.h"
 #include <shobjidl.h>
 #include "nlohmann/json.hpp"
+#include "ProgressBar.h"
 
 enum ErrorType {
     NONE = 0,
@@ -32,36 +33,133 @@ enum OperationType {
 };
 
 bool test() {
-    return false;
-    nlohmann::ordered_map<string, array<string, 3>> boneMatrices;
-    auto AddMatrices = [&boneMatrices](Model const &model, size_t column) {
-        for (auto const &bone : model.skeleton.bones) {
-            string matrix;
-            for (size_t r = 0; r < 4; r++) {
-                matrix += Format("%.4f %.4f %.4f %.4f",
-                    bone.matrix.m[r][0], bone.matrix.m[r][1], bone.matrix.m[r][2], bone.matrix.m[r][3]);
-                if (r != 3)
-                    matrix += "\n";
-            }
-            Replace(matrix, "-0.0000", "0.0000");
-            boneMatrices[bone.name][column] = matrix;
-        }
+    using namespace helper::rx3model;
+    struct MyVertex {
+        array<uint16_t, 16> indices;
+        array<uint8_t, 8> weights;
     };
-    Rx3Options rx3options("fifa16pc");
-    rx3options.targetSkeleton = ReadModelFromRX3(R"(data\skeletons\fifa16pc\skeleton_player.rx3)").skeleton;
-    Model rx3 = ReadModelFromRX3("head_0_2.rx3", rx3options);
-    AddMatrices(rx3, 0);
-    rx3.WriteFbx("head_0_2.fbx");
-    Model fbx("head_0_2.fbx");
-    AddMatrices(fbx, 1);
-    fbx.WriteFbx("head_0_2_rewritten.fbx");
-    Model fbx_rewritten("head_0_2_rewritten.fbx");
-    AddMatrices(fbx_rewritten, 2);
-    TextFileTable csv;
-    csv.AddRow("Bone", "rx3", "fbx", "fbx_rewritten");
-    for (auto const &[name, matrix] : boneMatrices)
-        csv.AddRow(name, matrix[0], matrix[1], matrix[2]);
-    csv.WriteCSV("matrices.csv");
+    vector<path> files;
+    path inPath = R"(E:\Temp\Projects\QuickBMS\fifa16_sceneassets)";
+    for (auto i : recursive_directory_iterator(inPath)) {
+        if (i.path().extension() == ".rx3")
+            files.push_back(i.path());
+    }
+    ProgressBar pb(files.size());
+    for (auto p : files) {
+        Rx3Container rx3(p);
+        auto animationSkin = rx3.FindFirstChunk(RX3_CHUNK_ANIMATION_SKIN);
+        if (!animationSkin)
+            continue;
+        auto vbs = rx3.FindAllChunks(RX3_CHUNK_VERTEX_BUFFER);
+        if (vbs.empty())
+            continue;
+        auto vfs = rx3.FindAllChunks(RX3_CHUNK_VERTEX_FORMAT);
+        if (vfs.size() != vbs.size())
+            continue;
+        Rx3Reader animationSkinReader(animationSkin);
+        animationSkinReader.Skip(4);
+        uint32_t numBones = animationSkinReader.Read<uint32_t>();
+        for (size_t i = 0; i < vbs.size(); i++) {
+            Rx3Reader vertexDeclReader(vfs[i]);
+            Rx3Reader vertexBufferReader(vbs[i]);
+            vertexDeclReader.Skip(4);
+            uint32_t declStrLen = vertexDeclReader.Read<uint32_t>();
+            if (declStrLen > 0) {
+                vertexDeclReader.Skip(8);
+                string decl = vertexDeclReader.GetString();
+                auto declElements = Split(decl, ' ');
+                if (!declElements.empty()) {
+                    vertexBufferReader.Skip(4);
+                    uint32_t numVertices = vertexBufferReader.Read<uint32_t>();
+                    uint32_t vs = vertexBufferReader.Read<uint32_t>();
+                    vertexBufferReader.Skip(4);
+                    auto vb = vertexBufferReader.GetCurrentPtr();
+                    uint8_t numBonesPerVertex = 0;
+                    vector<MyVertex> vertices(numVertices);
+                    const unsigned char *p8bitA = (const unsigned char *)vb;
+                    for (size_t d = 0; d < declElements.size(); d++) {
+                        auto elementInfo = Split(declElements[d], ':');
+                        string strUsage, strOffset, strDataType;
+                        if (elementInfo.size() == 5) {
+                            strUsage = elementInfo[0];
+                            strOffset = elementInfo[1];
+                            strDataType = elementInfo[4];
+                        }
+                        else if (elementInfo.size() == 4) {
+                            strUsage = elementInfo[0];
+                            strOffset = elementInfo[1];
+                            strDataType = elementInfo[3];
+                        }
+                        else if (elementInfo.size() == 3) {
+                            strUsage = elementInfo[0];
+                            strOffset = elementInfo[1];
+                            strDataType = elementInfo[2];
+                        }
+                        char usage = 0;
+                        unsigned char usageIndex = 0;
+                        if (strUsage.size() == 2) {
+                            usage = strUsage[0];
+                            usageIndex = (strUsage[1] >= '0' && strUsage[1] <= '9') ? (strUsage[1] - '0') : 0;
+                        }
+                        uint32_t offset = strOffset.empty() ? 0 : SafeConvertInt<uint32_t>(strOffset, true);
+                        DataType t = DataTypeIdFromName(strDataType);
+                        if (usage == 'i') {
+                            if (usageIndex <= 1) {
+                                numBonesPerVertex = (usageIndex + 1) * 4;
+                                if (t == dt_4u8 && numBones > 255)
+                                    t = dt_4u16;
+                                for (uint32_t v = 0; v < numVertices; v++) {
+                                    const uint8_t *p8bit = (const uint8_t *)vb + v * vs + offset;
+                                    if (t == dt_4u8) {
+                                        for (uint32_t bi = 0; bi < 4; bi++)
+                                            vertices[v].indices[usageIndex * 4 + bi] = p8bit[bi];
+                                    }
+                                    else if (t == dt_4u16) {
+                                        const uint16_t *p16bit = (const uint16_t *)p8bit;
+                                        for (uint32_t bi = 0; bi < 4; bi++)
+                                            vertices[v].indices[usageIndex * 4 + bi] = p16bit[bi];
+                                    }
+                                }
+                            }
+                        }
+                        else if (usage == 'w') {
+                            if (usageIndex <= 1) {
+                                for (uint32_t v = 0; v < numVertices; v++) {
+                                    const uint8_t *weights = (const uint8_t *)vb + v * vs + offset;
+                                    for (uint32_t bi = 0; bi < 4; bi++)
+                                        vertices[v].weights[usageIndex * 4 + bi] = weights[bi];
+                                }
+                            }
+                        }
+                    }
+                    if (numBones == 0)
+                        continue;
+                    for (size_t vi = 0; vi < vertices.size(); vi++) {
+                        auto const &v = vertices[vi];
+                        int firstZero = -1;
+                        for (int b = 0; b < numBonesPerVertex; b++) {
+                            if (v.weights[b] == 0) {
+                                firstZero = b;
+                                break;
+                            }
+                        }
+                        if (firstZero == 0) {
+                            ::Error("First zero at index 0 in model " + rx3.mName);
+                        }
+                        if (firstZero > 0 && firstZero != (numBonesPerVertex - 1)) {
+                            uint16_t padBone = v.indices[firstZero - 1];
+                            for (int b = firstZero; b < numBonesPerVertex; b++) {
+                                if (v.indices[b] != padBone) {
+                                    ::Error("Wrong padding at vertex " + to_string(vi) + " in model " + rx3.mName);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        pb.Step();
+    }
     return true;
 }
 
