@@ -8,11 +8,11 @@ map<string, GameConfig> &GameConfigs() {
         { "fifa12pc", GameConfig(
             true,  // BigEndian
             4,     // MaxBonesPerVertex
-            64,    // MaxBonesPerMesh
+            60,    // MaxBonesPerMesh
             true,  // TextureRasterSuffix
             false, // QuadMeshes
             true,  // StadiumTexturesAndModelInOneContainer
-            SKIN_PALETTE_OPCODES_ALWAYS,
+            false, // PadAllVertexBufferBoneIndices
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
                 { RX3_TEXFORMAT_DXT3, RX3_TEXFORMAT_DXT3 },
@@ -36,7 +36,7 @@ map<string, GameConfig> &GameConfigs() {
             true,  // TextureRasterSuffix
             false, // QuadMeshes
             true,  // StadiumTexturesAndModelInOneContainer
-            SKIN_PALETTE_OPCODES_ALWAYS,
+            false, // PadAllVertexBufferBoneIndices
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
                 { RX3_TEXFORMAT_DXT3, RX3_TEXFORMAT_DXT3 },
@@ -60,7 +60,7 @@ map<string, GameConfig> &GameConfigs() {
             true,  // TextureRasterSuffix
             false, // QuadMeshes
             false, // StadiumTexturesAndModelInOneContainer
-            SKIN_PALETTE_OPCODES_ALWAYS,
+            false, // PadAllVertexBufferBoneIndices
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
                 { RX3_TEXFORMAT_DXT3, RX3_TEXFORMAT_DXT3 },
@@ -80,11 +80,11 @@ map<string, GameConfig> &GameConfigs() {
         { "fifa15pc", GameConfig(
             false, // BigEndian
             8,     // MaxBonesPerVertex
-            256,   // MaxBonesPerMesh
+            UINT32_MAX, // MaxBonesPerMesh
             false, // TextureRasterSuffix
             false, // QuadMeshes
             false, // StadiumTexturesAndModelInOneContainer
-            SKIN_PALETTE_OPCODES_16BIT_BONE_IDS,
+            true,  // PadAllVertexBufferBoneIndices
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
                 { RX3_TEXFORMAT_DXT3, RX3_TEXFORMAT_DXT3 },
@@ -104,10 +104,10 @@ map<string, GameConfig> &GameConfigs() {
         { "fifa16pc", GameConfig(
             false, // BigEndian
             8,     // MaxBonesPerVertex
-            256,   // MaxBonesPerMesh
+            UINT32_MAX, // MaxBonesPerMesh
             false, // TextureRasterSuffix
             true,  // QuadMeshes
-            false, // StadiumTexturesAndModelInOneContainer
+            true,  // PadAllVertexBufferBoneIndices
             SKIN_PALETTE_OPCODES_16BIT_BONE_IDS,
             {
                 { RX3_TEXFORMAT_DXT1, RX3_TEXFORMAT_DXT1 },
@@ -132,7 +132,7 @@ map<string, GameConfig> &GameConfigs() {
 GameConfig::GameConfig() {}
 
 GameConfig::GameConfig(bool _BigEndian, unsigned char _MaxBonesPerVertex, unsigned int _MaxBonesPerMesh, bool _TextureRasterSuffix,
-    bool _QuadMeshes, bool _StadiumTexturesAndModelInOneContainer, eSkinPaletteOpcodesPolicty _SkinPaletteOpcodesPolicy,
+    bool _QuadMeshes, bool _StadiumTexturesAndModelInOneContainer, bool _PadAllVertexBufferBoneIndices,
     map<unsigned char, unsigned char> const &_TextureFormats)
 {
     BigEndian = _BigEndian;
@@ -141,7 +141,7 @@ GameConfig::GameConfig(bool _BigEndian, unsigned char _MaxBonesPerVertex, unsign
     TextureRasterSuffix = _TextureRasterSuffix;
     QuadMeshes = _QuadMeshes;
     StadiumTexturesAndModelInOneContainer = _StadiumTexturesAndModelInOneContainer;
-    SkinPaletteOpcodesPolicy = _SkinPaletteOpcodesPolicy;
+    PadAllVertexBufferBoneIndices = _PadAllVertexBufferBoneIndices;
     TextureFormats = _TextureFormats;
 }
 

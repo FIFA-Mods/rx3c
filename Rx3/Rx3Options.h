@@ -36,12 +36,12 @@ struct GameConfig {
     bool TextureRasterSuffix = false;
     bool QuadMeshes = false;
     bool StadiumTexturesAndModelInOneContainer = false;
-    eSkinPaletteOpcodesPolicty SkinPaletteOpcodesPolicy = SKIN_PALETTE_OPCODES_ALWAYS;
+    bool PadAllVertexBufferBoneIndices = false;
     map<unsigned char, unsigned char> TextureFormats;
 
     GameConfig();
     GameConfig(bool _BigEndian, unsigned char _MaxBonesPerVertex, unsigned int _MaxBonesPerMesh, bool _TextureRasterSuffix,
-        bool _QuadMeshes, bool _StadiumTexturesAndModelInOneContainer, eSkinPaletteOpcodesPolicty _SkinPaletteOpcodesPolicy,
+        bool _QuadMeshes, bool _StadiumTexturesAndModelInOneContainer, bool _PadAllVertexBufferBoneIndices,
         map<unsigned char, unsigned char> const &_TextureFormats);
 };
 

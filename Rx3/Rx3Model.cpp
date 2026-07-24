@@ -319,10 +319,58 @@ uint32_t PackVector2(DataType dt, unsigned char *data, Vector2 const &vec) {
     return DataTypeTotalSize[dt];
 }
 
-uint32_t PackBoneIndices(DataType dt, uint8_t *data, uint16_t const *indices, uint8_t numBoneSets) {
+struct PackedBoneInfo {
+    uint16_t bone = 0;
+    uint8_t weightPacked = 0;
+
+    PackedBoneInfo() {}
+    PackedBoneInfo(uint16_t _bone, uint8_t _weightPacked = 0) {
+        bone = _bone; weightPacked = _weightPacked;
+    }
+};
+
+vector<PackedBoneInfo> GetPackedBones(vector<pair<uint16_t, float>> const &bones) {
+    vector<PackedBoneInfo> result;
+    size_t n = bones.size();
+    if (n == 0)
+        return result;
+    double sum = 0.0;
+    for (auto const &b : bones)
+        sum += b.second;
+    if (sum <= 0.0)
+        return result;
+    result.resize(n);
+    vector<double> frac(n);
+    vector<int> val(n);
+    int sumFloor = 0;
+    for (size_t i = 0; i < n; i++) {
+        double scaled = (bones[i].second / sum) * 255.0;
+        val[i] = static_cast<int>(std::floor(scaled));
+        frac[i] = scaled - val[i];
+        sumFloor += val[i];
+        result[i].bone = bones[i].first;
+    }
+    int remainder = 255 - sumFloor;
+    vector<size_t> idx(n);
+    iota(idx.begin(), idx.end(), 0);
+    stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) {
+        return frac[a] > frac[b];
+    });
+    for (int i = 0; i < remainder; i++)
+        val[idx[i]] += 1;
+    for (size_t i = 0; i < n; i++)
+        result[i].weightPacked = static_cast<uint8_t>(std::clamp(val[i], 0, 255));
+    return result;
+}
+
+uint32_t WriteBoneIndices(DataType dt, uint8_t *data, vector<PackedBoneInfo> const &bones, uint8_t numBoneSets,
+    uint8_t numBonesToPad)
+{
     uint16_t lastIndex = 0;
     for (uint8_t i = 0; i < numBoneSets * 4; i++) {
-        uint16_t indexToWrite = (indices[i] == 0) ? lastIndex : indices[i];
+        uint16_t indexToWrite = (i < bones.size()) ? bones[i].bone : lastIndex;
+        if (i >= numBonesToPad)
+            indexToWrite = 0;
         lastIndex = indexToWrite;
         if (dt == dt_4u8)
             data[i] = static_cast<uint8_t>(indexToWrite);
@@ -332,43 +380,10 @@ uint32_t PackBoneIndices(DataType dt, uint8_t *data, uint16_t const *indices, ui
     return DataTypeTotalSize[dt] * numBoneSets;
 }
 
-
-
-uint32_t PackBoneWeights(DataType dt, uint8_t *data, float const *weights, uint8_t numBoneSets) {
-    if (dt == dt_4u8n) {
-        uint32_t bonesPerVertex = numBoneSets * 4;
-        uint8_t blendWeights[8] = {};
-        int numWeights = 0;
-        for (uint32_t w = 0; w < bonesPerVertex; w++) {
-            if (weights[w] == 0.0f)
-                break;
-            blendWeights[w] = static_cast<uint8_t>(round(weights[w] * 255.0f));
-            numWeights++;
-        }
-        if (numWeights == 1)
-            blendWeights[0] = 255;
-        else {
-            int totalWeights = 0;
-            for (int w = 0; w < numWeights; w++)
-                totalWeights += blendWeights[w];
-            if (totalWeights > 255) {
-                int diff = totalWeights - 255;
-                for (int w = 0; w < diff; w++)
-                    blendWeights[numWeights - w - 1] -= 1;
-            }
-            else if (totalWeights < 255) {
-                int diff = 255 - totalWeights;
-                for (int w = 0; w < diff; w++)
-                    blendWeights[w] += 1;
-            }
-            numWeights = 0;
-            for (unsigned int w = 0; w < bonesPerVertex; w++) {
-                if (blendWeights[w] == 0)
-                    break;
-                numWeights++;
-            }
-        }
-        memcpy(data, blendWeights, bonesPerVertex);
+uint32_t WriteBoneWeights(DataType dt, uint8_t *data, vector<PackedBoneInfo> const &bones, uint8_t numBoneSets) {
+    for (uint8_t i = 0; i < numBoneSets * 4; i++) {
+        if (dt == dt_4u8n)
+            data[i] = (i < bones.size()) ? bones[i].weightPacked : 0;
     }
     return DataTypeTotalSize[dt];
 }
@@ -683,9 +698,10 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
     DataType posDataType = options.precisePositions ? dt_3f32 : dt_4f16;
     bool hasSkeleton = !model.skeleton.bones.empty() && options.targetSkeleton.bones.empty();
     DataType bonesDataType = (model.skeleton.bones.size() > 255) ? dt_4u8 : dt_4u16;
-    bool boneRemapModeSwitch = options.gameConfig.SkinPaletteOpcodesPolicy == SKIN_PALETTE_OPCODES_ALWAYS
-        || bonesDataType == dt_4f16;
     uint8_t numBoneSets = 0;
+    uint8_t numBonesPerVertex = 0;
+    uint8_t numBonesToPad = 0;
+    vector<vector<vector<PackedBoneInfo>>> packedBonesPerObject;
     bool hasQuads = false;
     for (auto &o : model.objects) {
         for (auto const &p : o.firstMesh().polygons) {
@@ -695,6 +711,10 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
             }
         }
     }
+
+    auto IsObjectWriteable = [](Object const &o) {
+        return !o.meshes.empty() && !o.vertices.empty() && !o.firstMesh().polygons.empty();
+    };
 
     // calculate skeleton
     if (hasSkeleton) {
@@ -719,10 +739,25 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
         }
         model.RetargetSkeleton(options.targetSkeleton);
         model.LimitBonesPerVertex(options.gameConfig.MaxBonesPerVertex);
-        uint8_t maxBonesPerVertex = 0;
-        for (auto &o : model.objects)
-            maxBonesPerVertex = max<uint8_t>(NumBones(o.vertexFormat), maxBonesPerVertex);
-        numBoneSets = maxBonesPerVertex > 4 ? 2 : 1;
+        for (auto &o : model.objects) {
+            auto &objectPackedBones = packedBonesPerObject.emplace_back();
+            if (IsObjectWriteable(o)) {
+                objectPackedBones.resize(o.vertices.size());
+                for (size_t v = 0; v < o.vertices.size(); v++) {
+                    auto &packedBones = objectPackedBones[v];
+                    auto bones = MeshSkinning::GetVertexBones(o.vertices[v], NumBones(o.vertexFormat));
+                    if (bones.size() > 1)
+                        packedBones = GetPackedBones(bones);
+                    if (packedBones.empty())
+                        packedBones.push_back(PackedBoneInfo(0, 255));
+                    else if (packedBones.size() == 1)
+                        packedBones[0].weightPacked = 255;
+                    numBonesPerVertex = max(static_cast<uint8_t>(packedBones.size()), numBonesPerVertex);
+                }
+            }
+        }
+        numBoneSets = numBonesPerVertex > 4 ? 2 : 1;
+        numBonesToPad = options.gameConfig.PadAllVertexBufferBoneIndices ? (numBoneSets * 4) : numBonesPerVertex;
     }
 
     // 2f16, 4f16, 3f32, 4u8n, 4u8, 4u16, 3s10n
@@ -733,8 +768,9 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
         return DataTypeTotalSize[dataType];
     };
 
-    for (auto const &o : model.objects) {
-        if (!o.meshes.empty() && !o.vertices.empty() && !o.firstMesh().polygons.empty()) {
+    for (size_t oi = 0; oi < model.objects.size(); oi++) {
+        auto const &o = model.objects[oi];
+        if (IsObjectWriteable(o)) {
             auto mesh = o.firstMesh();
             uint32_t indexSize = o.vertices.size() > 0xFFFF ? 4 : 2;
             nametable.emplace_back(RX3_CHUNK_SIMPLE_MESH, o.name + ".FxRenderableSimple");
@@ -755,6 +791,7 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
                     vertexOffset += AddVertexDecl(vf, 'w', set, vertexOffset, dt_4u8n);
             }
             vertexFormats.push_back(vf);
+            vector<uint8_t> skinPalette;
             uint32_t vertexStride = vertexOffset;
             vector<uint8_t> vertexBuffer(o.vertices.size() * vertexStride);
             uint32_t vbOffset = 0;
@@ -771,8 +808,14 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
                         Vector2(o.vertices[v].uv[t].x, 1.0f - o.vertices[v].uv[t].y));
                 }
                 if (numBoneSets > 0) {
-                    vbOffset += PackBoneIndices(bonesDataType, &vertexBuffer[vbOffset], o.vertices[v].boneIndices, numBoneSets);
-                    vbOffset += PackBoneWeights(dt_4u8n, &vertexBuffer[vbOffset], o.vertices[v].boneWeights, numBoneSets);
+                    auto const &bones = packedBonesPerObject[oi][v];
+                    uint8_t const *boneIndices = &vertexBuffer[vbOffset];
+                    vbOffset += WriteBoneIndices(bonesDataType, &vertexBuffer[vbOffset], bones, numBoneSets, numBonesToPad);
+                    vbOffset += WriteBoneWeights(dt_4u8n, &vertexBuffer[vbOffset], bones, numBoneSets);
+                    for (int b = 3; b >= 0; b--) {
+                        if (std::find(skinPalette.begin(), skinPalette.end(), boneIndices[b]) == skinPalette.end())
+                            skinPalette.push_back(boneIndices[b]);
+                    }
                 }
             }
             // vb
@@ -874,55 +917,30 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
             }
             ibWriter.AlignAndUpdateTotalSize();
             // boneremap
-            //if (hasSkeleton) {
-            //    vector<uint8_t> skinPalette;
-            //    set<uint16_t> usedBones;
-            //    for (auto const &v : o.vertices) {
-            //        auto bones = MeshSkinning::GetVertexBones(v, 4); // always use 4 bones, no matter how many are actually there
-            //        bool lastBone16bit = false;
-            //        for (auto bi = bones.rbegin(); bi != bones.rend(); bi++) {
-            //            uint16_t boneIndex = (*bi).first;
-            //            uint8_t boneIndex8bit = boneIndex & 0xFF;
-            //            if (std::find(skinPalette.begin(), skinPalette.end(), boneIndex8bit) == skinPalette.end()) {
-            //
-            //            }
-            //            bool isBone16bit = boneIndex > 255;
-            //            if (boneRemapModeSwitch) {
-            //                if (skinPalette.empty() || lastBone16bit != isBone16bit) {
-            //                    if (std::find(skinPalette.begin(), skinPalette.end(), isBone16bit) == skinPalette.end()) {
-            //                        skinPalette.push_back(isBone16bit);
-            //                        lastBone16bit = isBone16bit;
-            //                    }
-            //                }
-            //            }
-            //            
-            //            
-            //                skinPalette.push_back(boneIndex8bit);
-            //                lastBone16bit = isBone16bit;
-            //            }
-            //            usedBones.insert(boneIndex);
-            //        }
-            //    }
-            //    if (skinPalette.size() > 255)
-            //        skinPalette.resize(255);
-            //    if (usedBones.size() > options.gameConfig.MaxBonesPerMesh) {
-            //        // TODO: error
-            //    }
-            //    Rx3Writer boneRemapWriter(boneremaps.emplace_back());
-            //    boneRemapWriter.Put<uint32_t>(0);
-            //    boneRemapWriter.Put<uint8_t>(skinPalette.size());
-            //    boneRemapWriter.Align();
-            //    vector<uint8_t> boneRemapTable(256, 0);
-            //    for (uint8_t b = 0; b < skinPalette.size(); b++)
-            //        boneRemapTable[skinPalette[b]] = b;
-            //    boneRemapWriter.Put(boneRemapTable.data(), boneRemapTable.size());
-            //    boneRemapWriter.Align();
-            //    vector<uint8_t> skinPaletteTable(256, 0);
-            //    for (uint8_t b = 0; b < skinPalette.size(); b++)
-            //        skinPaletteTable[b] = skinPalette[b];
-            //    boneRemapWriter.Put(skinPaletteTable.data(), skinPaletteTable.size());
-            //    boneRemapWriter.AlignAndUpdateTotalSize();
-            //}
+            if (hasSkeleton) {
+                if (skinPalette.size() > 255) {
+                    ::Error(L"Too many bones in the skinning palette (%d)\nIn model %s", skinPalette.size(), sourcePath.c_str());
+                    skinPalette.resize(255);
+                }
+                else if (skinPalette.size() > options.gameConfig.MaxBonesPerMesh) {
+                    ::Error(L"Too many bones in the skinning palette (%d)\nIn model %s", skinPalette.size(), sourcePath.c_str());
+                    skinPalette.resize(options.gameConfig.MaxBonesPerMesh);
+                }
+                Rx3Writer boneRemapWriter(boneremaps.emplace_back());
+                boneRemapWriter.Put<uint32_t>(0);
+                boneRemapWriter.Put<uint8_t>(static_cast<uint8_t>(skinPalette.size()));
+                boneRemapWriter.Align();
+                vector<uint8_t> boneRemapTable(256, 0);
+                for (uint8_t b = 0; b < skinPalette.size(); b++)
+                    boneRemapTable[skinPalette[b]] = b;
+                boneRemapWriter.Put(boneRemapTable.data(), boneRemapTable.size());
+                boneRemapWriter.Align();
+                vector<uint8_t> skinPaletteTable(256, 0);
+                for (uint8_t b = 0; b < skinPalette.size(); b++)
+                    skinPaletteTable[b] = skinPalette[b];
+                boneRemapWriter.Put(skinPaletteTable.data(), skinPaletteTable.size());
+                boneRemapWriter.AlignAndUpdateTotalSize();
+            }
         }
     }
 

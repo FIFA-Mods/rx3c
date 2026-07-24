@@ -10,6 +10,7 @@
 #include <any>
 #include <filesystem>
 #include <iostream>
+#include <numeric>
 struct IUnknown;
 #include <Windows.h>
 #undef min
