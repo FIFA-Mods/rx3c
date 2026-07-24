@@ -600,18 +600,20 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                     }
                     else if (primType == RX3_PRIM_TRIANGLESTRIP) {
                         if (numIndices >= 3) {
+                            std::vector<uint32_t> raw(numIndices);
+                            for (size_t i = 0; i < numIndices; ++i)
+                                raw[i] = ReadIndex(ibReader, is);
+                            triangles.reserve(numIndices - 2);
                             for (size_t k = 0; k + 2 < numIndices; ++k) {
-                                uint32_t i0 = ReadIndex(ibReader, is);
-                                uint32_t i1 = ReadIndex(ibReader, is);
-                                uint32_t i2 = ReadIndex(ibReader, is);
-                                vector<uint32_t> tri;
-                                if ((k & 1) == 0)
-                                    tri = { i0, i1, i2 };
-                                else
-                                    tri = { i1, i0, i2 };
+                                uint32_t i0 = raw[k];
+                                uint32_t i1 = raw[k + 1];
+                                uint32_t i2 = raw[k + 2];
+                                vector<uint32_t> tri = ((k & 1) == 0) ?
+                                    vector<uint32_t>{ i0, i1, i2 } :
+                                    vector<uint32_t>{ i1, i0, i2 };
                                 if (tri[0] == tri[1] || tri[1] == tri[2] || tri[0] == tri[2])
                                     continue;
-                                triangles.push_back(tri);
+                                triangles.push_back(std::move(tri));
                             }
                         }
                     }
@@ -658,12 +660,28 @@ Model ModelFromSimpleMeshContainer(Rx3Container &rx3, Rx3Options const &options)
         }
     }
     vector<string> meshNames = ExtractNamesFromRx3(rx3, RX3_CHUNK_SIMPLE_MESH);
-    model.objects.resize(ibs.size());
+    vector<string> objectNames(ibs.size());
     for (size_t i = 0; i < ibs.size(); i++) {
-        auto &obj = model.objects[i];
-        obj.name = i < meshNames.size() ? meshNames[i] : "object_" + to_string(i);
-        if (obj.name.ends_with(".FxRenderableSimple"))
-            obj.name = obj.name.substr(0, obj.name.length() - strlen(".FxRenderableSimple"));
+        if (i < meshNames.size()) {
+            objectNames[i] = meshNames[i];
+            if (objectNames[i].ends_with("_.FxRenderableSimple"))
+                objectNames[i] = objectNames[i].substr(0, objectNames[i].length() - strlen("_.FxRenderableSimple"));
+            else if (objectNames[i].ends_with(".FxRenderableSimple"))
+                objectNames[i] = objectNames[i].substr(0, objectNames[i].length() - strlen(".FxRenderableSimple"));
+        }
+       else
+            objectNames[i] = "object_" + to_string(i);
+    }
+    string nodeName = rx3.mName;
+    if (std::find(objectNames.begin(), objectNames.end(), nodeName) != objectNames.end())
+        nodeName += "_root";
+    model.objects.resize(ibs.size() + 1);
+    auto &node = model.objects[0];
+    node.name = nodeName;
+    for (size_t i = 0; i < ibs.size(); i++) {
+        auto &obj = model.objects[i + 1];
+        obj.name = objectNames[i];
+        obj.parent = nodeName;
         Rx3Reader meshChunkReader(meshes[i]);
         uint16_t primType = meshChunkReader.Read<uint16_t>();
         auto qb = qbs.size() == ibs.size() ? qbs[i] : nullptr;
@@ -764,7 +782,7 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
     auto AddVertexDecl = [](string &dst, char usage, unsigned char usageIndex, unsigned int offset, DataType dataType) {
         if (!dst.empty())
             dst += " ";
-        dst += Format("%c%X:%02X:00:0001:%s", usage, usageIndex, DataTypeNames[dataType]);
+        dst += Format("%c%X:%02X:00:0001:%s", usage, usageIndex, offset, DataTypeNames[dataType]);
         return DataTypeTotalSize[dataType];
     };
 
@@ -780,8 +798,8 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
                 vertexOffset += AddVertexDecl(vf, 'n', 0, vertexOffset, dt_3s10n);
             if (o.vertexFormat & V_Tangent)
                 vertexOffset += AddVertexDecl(vf, 'g', 0, vertexOffset, dt_3s10n);
-            if (o.vertexFormat & V_Binormal)
-                vertexOffset += AddVertexDecl(vf, 'b', 0, vertexOffset, dt_3s10n);
+            //if (o.vertexFormat & V_Binormal)
+            //    vertexOffset += AddVertexDecl(vf, 'b', 0, vertexOffset, dt_3s10n);
             for (uint8_t t = 0; t < NumTexCoords(o.vertexFormat); t++)
                 vertexOffset += AddVertexDecl(vf, 't', t, vertexOffset, dt_2f16);
             if (numBoneSets > 0) {
@@ -801,8 +819,8 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
                     vbOffset += PackVector3(dt_3s10n, &vertexBuffer[vbOffset], o.vertices[v].normal);
                 if (o.vertexFormat & V_Tangent)
                     vbOffset += PackVector3(dt_3s10n, &vertexBuffer[vbOffset], o.vertices[v].tangent);
-                if (o.vertexFormat & V_Binormal)
-                    vbOffset += PackVector3(dt_3s10n, &vertexBuffer[vbOffset], o.vertices[v].binormal);
+                //if (o.vertexFormat & V_Binormal)
+                //    vbOffset += PackVector3(dt_3s10n, &vertexBuffer[vbOffset], o.vertices[v].binormal);
                 for (size_t t = 0; t < NumTexCoords(o.vertexFormat); t++) {
                     vbOffset += PackVector2(dt_2f16, &vertexBuffer[vbOffset],
                         Vector2(o.vertices[v].uv[t].x, 1.0f - o.vertices[v].uv[t].y));

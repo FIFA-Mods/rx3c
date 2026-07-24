@@ -167,9 +167,12 @@ int wmain(int argc, wchar_t *argv[]) {
         bool createFolder = rx3options.folderOption == FOLDER_OPTION_ALWAYS_CREATE ||
             (rx3options.folderOption == FOLDER_OPTION_AUTO && rx3.FindFirstChunk(RX3_CHUNK_TEXTURE_BATCH));
         path outDir = createFolder ? (outFolder / rx3.mName) : outFolder;
-        ExtractTexturesFromRX3(rx3, outDir, rx3options);
-        ExtractHotspotFromRX3(rx3, outDir, rx3options);
-        ExtractModelFromRX3(rx3, outDir, rx3options);
+        if (rx3.FindFirstChunk(RX3_CHUNK_TEXTURE))
+            ExtractTexturesFromRX3(rx3, outDir, rx3options);
+        if (rx3.FindFirstChunk(RX3_CHUNK_HOTSPOT))
+            ExtractHotspotFromRX3(rx3, outDir, rx3options);
+        if (rx3.FindFirstChunk(RX3_CHUNK_VERTEX_BUFFER))
+            ExtractModelFromRX3(rx3, outDir, rx3options);
     };
 
     auto ImportRX3 = [&](vector<path> const &inFiles, wstring const &rx3DefaultName, path const &outFolder) {

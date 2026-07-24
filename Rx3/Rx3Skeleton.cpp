@@ -92,11 +92,8 @@ Model ModelFromSkeletonContainer(Rx3Container &rx3, Rx3Options const &options) {
         if (numBones > 0) {
             auto &bones = model.skeleton.bones;
             bones.resize(numBones);
-            for (uint32_t b = 0; b < numBones; b++) {
+            for (uint32_t b = 0; b < numBones; b++)
                 bones[b].name = (b < boneNames.size()) ? boneNames[b] : "bone_" + to_string(b);
-                // TODO: remove this
-                bones[b].name += " [" + to_string(b) + "]";
-            }
             vector<Matrix4x4> boneInversedMatrices(numBones);
             for (uint32_t b = 0; b < numBones; b++) {
                 ReadMatrix4x4(animationSkinReader, boneInversedMatrices[b]);
