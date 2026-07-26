@@ -4,7 +4,8 @@
 #include "Rx3Scene.h"
 #include "Rx3Morph.h"
 #include "Rx3Skeleton.h"
-#include "half.hpp"
+//#define HALF_ROUND_STYLE 0
+//#include "half.hpp"
 #include "MeshOperations/MeshTristrip.h"
 #include "MeshOperations/MeshSkinning.h"
 
@@ -31,18 +32,24 @@ DataType DataTypeIdFromName(string const &name) {
     return dt_unknown;
 }
 
-float UnpackFloatFrom10Bit(int value) {
-    return (value < 0) ? float(value) / 512.0f : float(value) / 511.0f;
+int32_t DecodeSigned10(uint32_t bits) {
+    static const int32_t kSignExtend[2] = { 0, -512 };
+    int32_t v = bits & 0x3FF;
+    return v | kSignExtend[v >> 9];
 }
 
-int PackFloatTo10Bit(float value) {
-    if (value < 0.0f)
-        return int(roundf(value * 512.0f));
-    return int(roundf(value * 511.0f));
+uint32_t EncodeSigned10(float value) {
+    value = max(-1.0f, min(1.0f, value));
+    int32_t i = (int32_t)lround(value * 511.0f);
+    return (uint32_t)i & 0x3FF;
+}
+
+float UnpackFloatFrom10Bit(int value) {
+    return (float)value / 511.0f;
 }
 
 float UnpackFloatFrom11Bit(int value) {
-    return (value < 0) ? float(value) / 1024.0f : float(value) / 1023.0f;
+    return (float)value / 1023.0f;
 }
 
 array<float, 4> UnpackVertexAttribute(DataType dt, const unsigned char *data) {
@@ -153,26 +160,21 @@ array<float, 4> UnpackVertexAttribute(DataType dt, const unsigned char *data) {
     if (dt == dt_3s10n) {
         uint32_t packed;
         memcpy(&packed, data, sizeof(packed));
-        int32_t x = ((packed >> 0) & 0x3FF) - ((packed & 0x200) ? 1024 : 0);
-        int32_t y = ((packed >> 10) & 0x3FF) - ((packed & 0x80000) ? 1024 : 0);
-        int32_t z = ((packed >> 20) & 0x3FF) - ((packed & 0x20000000) ? 1024 : 0);
-        return { UnpackFloatFrom10Bit(x), UnpackFloatFrom10Bit(y), UnpackFloatFrom10Bit(z), 1 };
+        int32_t x = DecodeSigned10(packed);
+        int32_t y = DecodeSigned10(packed >> 10);
+        int32_t z = DecodeSigned10(packed >> 20);
+        const float kScale = 1.0f / 511.0f;
+        return { (float)x * kScale, (float)y * kScale, (float)z * kScale, 1 };
     }
 
     // Half-float (16-bit float)
     if (dt == dt_2f16) {
-        half_float::half v[2]; memcpy(v, data, sizeof(v));
-        float x = v[0];
-        float y = v[1];
-        return { x, y, 0, 1 };
+        uint16_t v[2]; memcpy(v, data, sizeof(v));
+        return { HalfFloatToFloat(v[0]), HalfFloatToFloat(v[1]), 0, 1 };
     }
     if (dt == dt_4f16) {
-        half_float::half v[4]; memcpy(v, data, sizeof(v));
-        float x = v[0];
-        float y = v[1];
-        float z = v[2];
-        float w = v[3];
-        return { x, y, z, w };
+        uint16_t v[4]; memcpy(v, data, sizeof(v));
+        return { HalfFloatToFloat(v[0]), HalfFloatToFloat(v[1]), HalfFloatToFloat(v[2]), HalfFloatToFloat(v[3]) };
     }
 
     // RGB565 format
@@ -284,25 +286,20 @@ uint32_t PackVector3(DataType dt, unsigned char *data, Vector3 const &vec) {
     if (dt == dt_3f32)
         memcpy(data, &vec, sizeof(Vector3));
     else if (dt == dt_4f16) {
-        uint16_t buf[4];
-        buf[0] = half_float::half(vec.x).data_;
-        buf[1] = half_float::half(vec.y).data_;
-        buf[2] = half_float::half(vec.z).data_;
-        buf[3] = half_float::half(1.0f).data_;
+        uint16_t buf[4] = {
+            FloatToHalfFloat(vec.x),
+            FloatToHalfFloat(vec.y),
+            FloatToHalfFloat(vec.z),
+            FloatToHalfFloat(1.0f)
+        };
         memcpy(data, buf, 8);
     }
     else if (dt == dt_3s10n) {
-        struct _3s10n {
-            int x : 10;
-            int y : 10;
-            int z : 10;
-            int pad : 2;
-        };
-        _3s10n *dst = (_3s10n *)data;
-        dst->x = PackFloatTo10Bit(vec.x);
-        dst->y = PackFloatTo10Bit(vec.y);
-        dst->z = PackFloatTo10Bit(vec.z);
-        dst->pad = 0;
+        uint32_t x = EncodeSigned10(vec.x);
+        uint32_t y = EncodeSigned10(vec.y);
+        uint32_t z = EncodeSigned10(vec.z);
+        uint32_t packed = x | (y << 10) | (z << 20);
+        memcpy(data, &packed, 4);
     }
     return DataTypeTotalSize[dt];
 }
@@ -311,9 +308,10 @@ uint32_t PackVector2(DataType dt, unsigned char *data, Vector2 const &vec) {
     if (dt == dt_2f32)
         memcpy(data, &vec, sizeof(Vector2));
     else if (dt == dt_2f16) {
-        uint16_t buf[2];
-        buf[0] = half_float::half(vec.x).data_;
-        buf[1] = half_float::half(vec.y).data_;
+        uint16_t buf[2] = {
+            FloatToHalfFloat(vec.x),
+            FloatToHalfFloat(vec.y)
+        };
         memcpy(data, buf, 4);
     }
     return DataTypeTotalSize[dt];
@@ -544,8 +542,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
                             array<float, 4> joints = UnpackVertexAttribute(t, vd);
                             for (uint32_t bi = 0; bi < 4; bi++) {
-                                obj.vertices[v].boneIndices[usageIndex * 4 + bi] =
-                                    (uint16_t)joints[bi];
+                                obj.vertices[v].boneIndices[usageIndex * 4 + bi] = (uint16_t)joints[bi];
                             }
                         }
                     }
@@ -556,8 +553,7 @@ void SetupObjectMesh(Object &obj, Rx3Chunk *vfChunk, Rx3Chunk *vbChunk, Rx3Chunk
                             const unsigned char *vd = (const unsigned char *)vb + v * vs + offset;
                             array<float, 4> weights = UnpackVertexAttribute(t, vd);
                             for (uint32_t bi = 0; bi < 4; bi++) {
-                                obj.vertices[v].boneWeights[usageIndex * 4 + bi] =
-                                    weights[bi];
+                                obj.vertices[v].boneWeights[usageIndex * 4 + bi] = weights[bi];
                             }
                         }
                     }
@@ -714,8 +710,8 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
     vector<pair<uint32_t, string>> nametable;
     vector<Matrix4x4> ibms;
     DataType posDataType = options.precisePositions ? dt_3f32 : dt_4f16;
-    bool hasSkeleton = !model.skeleton.bones.empty() && options.targetSkeleton.bones.empty();
-    DataType bonesDataType = (model.skeleton.bones.size() > 255) ? dt_4u8 : dt_4u16;
+    bool hasSkeleton = !model.skeleton.bones.empty() && !options.targetSkeleton.bones.empty();
+    DataType bonesDataType = (model.skeleton.bones.size() > 255) ? dt_4u16 : dt_4u8;
     uint8_t numBoneSets = 0;
     uint8_t numBonesPerVertex = 0;
     uint8_t numBonesToPad = 0;
@@ -764,7 +760,11 @@ void ModelToSimpleMeshContainer(Model const &source, path const &sourcePath, pat
                 for (size_t v = 0; v < o.vertices.size(); v++) {
                     auto &packedBones = objectPackedBones[v];
                     auto bones = MeshSkinning::GetVertexBones(o.vertices[v], NumBones(o.vertexFormat));
-                    if (bones.size() > 1)
+                    if (bones.empty())
+                        packedBones.push_back(PackedBoneInfo(0, 255));
+                    else if (bones.size() == 1)
+                        packedBones.push_back(PackedBoneInfo(bones[0].first, 255));
+                    else
                         packedBones = GetPackedBones(bones);
                     if (packedBones.empty())
                         packedBones.push_back(PackedBoneInfo(0, 255));

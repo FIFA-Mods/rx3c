@@ -559,6 +559,81 @@ wstring ToUTF16(string const &str) {
     return strTo;
 }
 
+uint16_t FloatToHalfFloat(float value) {
+    // Type-pun the float to its raw bit pattern.
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+
+    // Extract sign, rebias exponent (127 -> 15), and grab mantissa.
+    uint32_t sign     = (bits >> 16) & 0x8000;
+    int32_t  exponent = static_cast<int32_t>((bits >> 23) & 0xFF) - 112;
+    uint32_t mantissa = bits & 0x7FFFFF;
+
+    if (exponent > 0)
+    {
+        if (exponent == 143)
+        {
+            // Source exponent field was 0xFF -> Inf or NaN.
+            if (mantissa != 0)
+            {
+                // NaN: shift mantissa down, but force at least one
+                // bit set so it can never collapse into Infinity.
+                uint32_t m = mantissa >> 13;
+                return static_cast<uint16_t>(sign | m | (m == 0) | 0x7C00);
+            }
+            // mantissa == 0 -> Infinity, falls through below.
+        }
+        else if (exponent <= 30)
+        {
+            // Representable normal half-float.
+            return static_cast<uint16_t>(sign | (exponent << 10) | (mantissa >> 13));
+        }
+
+        // exponent in [31, 142], or (==143 && mantissa == 0): overflow -> Infinity.
+        return static_cast<uint16_t>(sign | 0x7C00);
+    }
+    else if (exponent >= -10)
+    {
+        // Subnormal half-float: restore implicit leading bit, then
+        // shift right by (1 - exponent) extra places plus the usual 13.
+        return static_cast<uint16_t>(sign | ((mantissa | 0x800000) >> (1 - exponent) >> 13));
+    }
+    else
+    {
+        // Too small even for a subnormal half -> flush to zero.
+        return 0;
+    }
+}
+
+float HalfFloatToFloat(uint16_t half) {
+    static const uint16_t exponentTable[64] = {
+        // ---- sign = 0 (positive half-floats) ----
+        0x000,                                                        // exponent 0  -> +0 (subnormals NOT renormalized, see note)
+        0x071, 0x072, 0x073, 0x074, 0x075, 0x076, 0x077,              // exponent 1-7
+        0x078, 0x079, 0x07A, 0x07B, 0x07C, 0x07D, 0x07E, 0x07F,       // exponent 8-15
+        0x080, 0x081, 0x082, 0x083, 0x084, 0x085, 0x086, 0x087,       // exponent 16-23
+        0x088, 0x089, 0x08A, 0x08B, 0x08C, 0x08D, 0x08E,              // exponent 24-30
+        0x0FF,                                                        // exponent 31 -> +Inf / NaN
+    
+        // ---- sign = 1 (negative half-floats) ----
+        0x100,                                                        // exponent 0  -> -0
+        0x171, 0x172, 0x173, 0x174, 0x175, 0x176, 0x177,
+        0x178, 0x179, 0x17A, 0x17B, 0x17C, 0x17D, 0x17E, 0x17F,
+        0x180, 0x181, 0x182, 0x183, 0x184, 0x185, 0x186, 0x187,
+        0x188, 0x189, 0x18A, 0x18B, 0x18C, 0x18D, 0x18E,
+        0x1FF,                                                        // exponent 31 -> -Inf / NaN
+    };
+    
+    uint32_t mantissa       = (static_cast<uint32_t>(half) & 0x3FF) << 13;
+    uint32_t signExponent   = exponentTable[(half >> 10) & 0x3F];
+
+    uint32_t bits = (mantissa & 0x7FFFFF) | (signExponent << 23);
+
+    float result;
+    memcpy(&result, &bits, sizeof(result));
+    return result;
+}
+
 namespace memory {
 size_t GetNumBytesToAlign(size_t offset, size_t alignment) {
     size_t m = offset % alignment;

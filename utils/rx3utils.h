@@ -149,6 +149,8 @@ bool IsNumber(wstring const &str, bool hexadecimal);
 bool IsNumber(string const &str, bool hexadecimal);
 string ToUTF8(wstring const &wstr);
 wstring ToUTF16(string const &str);
+float HalfFloatToFloat(uint16_t half);
+uint16_t FloatToHalfFloat(float value);
 
 namespace memory {
 template<typename T>
