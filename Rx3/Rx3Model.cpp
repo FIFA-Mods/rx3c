@@ -4,8 +4,6 @@
 #include "Rx3Scene.h"
 #include "Rx3Morph.h"
 #include "Rx3Skeleton.h"
-//#define HALF_ROUND_STYLE 0
-//#include "half.hpp"
 #include "MeshOperations/MeshTristrip.h"
 #include "MeshOperations/MeshSkinning.h"
 

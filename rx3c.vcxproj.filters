@@ -75,9 +75,6 @@
     <ClInclude Include="utils\errormsg.h">
       <Filter>utils</Filter>
     </ClInclude>
-    <ClInclude Include="utils\half.hpp">
-      <Filter>utils</Filter>
-    </ClInclude>
     <ClInclude Include="utils\rx3utils.h">
       <Filter>utils</Filter>
     </ClInclude>

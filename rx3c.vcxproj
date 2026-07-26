@@ -84,7 +84,6 @@
     <ClInclude Include="Rx3\Rx3Textures.h" />
     <ClInclude Include="utils\commandline.h" />
     <ClInclude Include="utils\errormsg.h" />
-    <ClInclude Include="utils\half.hpp" />
     <ClInclude Include="utils\rx3utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
