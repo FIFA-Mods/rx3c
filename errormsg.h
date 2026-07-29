@@ -1,5 +1,5 @@
 #pragma once
-#include "rx3utils.h"
+#include "Rx3Utils.h"
 
 enum ErrorDisplayType {
     ERR_MESSAGE_BOX,

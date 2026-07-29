@@ -2,93 +2,11 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Rx3\Rx3Container.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\Rx3Hotspot.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\Rx3Model.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\Rx3Names.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\Rx3Textures.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="utils\commandline.cpp">
-      <Filter>utils</Filter>
-    </ClCompile>
-    <ClCompile Include="utils\errormsg.cpp">
-      <Filter>utils</Filter>
-    </ClCompile>
-    <ClCompile Include="utils\rx3utils.cpp">
-      <Filter>utils</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\Rx3Options.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\Rx3Scene.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\Rx3Morph.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\Rx3Skeleton.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\Rx3TextureMetadata.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
+    <ClCompile Include="commandline.cpp" />
+    <ClCompile Include="errormsg.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Filter Include="Rx3">
-      <UniqueIdentifier>{5e408a2e-c534-41a1-a2e7-ab3121c70bb8}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="utils">
-      <UniqueIdentifier>{7fb3e859-0af2-45e5-b34b-ceac19a58ea3}</UniqueIdentifier>
-    </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="Rx3\Rx3Container.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\Rx3Hotspot.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\Rx3Model.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\Rx3Names.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\Rx3Options.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\Rx3Textures.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="utils\commandline.h">
-      <Filter>utils</Filter>
-    </ClInclude>
-    <ClInclude Include="utils\errormsg.h">
-      <Filter>utils</Filter>
-    </ClInclude>
-    <ClInclude Include="utils\rx3utils.h">
-      <Filter>utils</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\Rx3Scene.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\Rx3Morph.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\Rx3Skeleton.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\Rx3TextureMetadata.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
+    <ClInclude Include="commandline.h" />
+    <ClInclude Include="errormsg.h" />
   </ItemGroup>
 </Project>

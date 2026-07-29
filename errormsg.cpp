@@ -1,5 +1,7 @@
 #include "errormsg.h"
 
+using namespace rx3utils;
+
 ErrorDisplayType displayType = ErrorDisplayType::ERR_NONE;
 
 void SetErrorDisplayType(ErrorDisplayType type) {
@@ -8,7 +10,7 @@ void SetErrorDisplayType(ErrorDisplayType type) {
 
 bool ErrorMessage(string const &msg) {
     if (displayType == ErrorDisplayType::ERR_MESSAGE_BOX)
-        Error(msg.c_str());
+        ::Error(msg.c_str());
     else if (displayType == ErrorDisplayType::ERR_CONSOLE)
         cout << msg << endl;
     return false;

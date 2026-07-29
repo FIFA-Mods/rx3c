@@ -12,6 +12,8 @@
 #include "nlohmann/json.hpp"
 #include "ProgressBar.h"
 
+using namespace rx3utils;
+
 enum ErrorType {
     NONE = 0,
     NOT_ENOUGHT_ARGUMENTS = 1,
@@ -136,11 +138,6 @@ int wmain(int argc, wchar_t *argv[]) {
         rx3options.modelFormat = ToLower(WtoA(cmd.GetArgumentString(L"model")));
     if (cmd.HasArgument(L"texture"))
         rx3options.textureFormat = ToLower(WtoA(cmd.GetArgumentString(L"texture")));
-    if (cmd.HasArgument(L"skeleton")) {
-        path skeletonPath = cmd.GetArgumentPath(L"skeleton");
-        if (exists(skeletonPath))
-            rx3options.targetSkeleton = ReadModelFromRX3(skeletonPath).skeleton;
-    }
     if (cmd.HasArgument(L"folderOption")) {
         auto strFolderOption = ToLower(cmd.GetArgumentString(L"folderOption"));
         if (strFolderOption == L"alwaysCreate")
@@ -148,11 +145,7 @@ int wmain(int argc, wchar_t *argv[]) {
         else if (strFolderOption == L"neverCreate")
             rx3options.folderOption = FOLDER_OPTION_NEVER_CREATE;
     }
-    if (cmd.HasArgument(L"baseModel")) {
-        path baseModelPath = cmd.GetArgumentPath(L"baseModel");
-        if (exists(baseModelPath))
-            rx3options.baseModel = ReadModelFromRX3(baseModelPath);
-    }
+    
     rx3options.exportQuads = cmd.HasOption(L"exportQuads");
     rx3options.writeHDR = cmd.HasOption(L"writeHDR");
     rx3options.writeTexMetadata = cmd.HasOption(L"writeTexMetadata");
@@ -161,6 +154,18 @@ int wmain(int argc, wchar_t *argv[]) {
         ReadTexFormatFile(cmd.GetArgumentPath(L"texFormatFile"), rx3options.texTargetFormats, order);
     }
     rx3options.metadata = !cmd.HasOption(L"noMetadata");
+    rx3options.boneMatricesOption = eBoneMatricesOption::BONE_MATRICES_FROM_BASE_MODEL;
+
+    if (cmd.HasArgument(L"skeleton")) {
+        path skeletonPath = cmd.GetArgumentPath(L"skeleton");
+        if (exists(skeletonPath))
+            rx3options.targetSkeleton = ReadModelFromRX3(skeletonPath).skeleton;
+    }
+    if (cmd.HasArgument(L"baseModel")) {
+        path baseModelPath = cmd.GetArgumentPath(L"baseModel");
+        if (exists(baseModelPath))
+            rx3options.baseModel = ReadModelFromRX3(baseModelPath, rx3options);
+    }
 
     auto ExportRX3 = [&](path const &in, path const &outFolder) {
         Rx3Container rx3(in);
