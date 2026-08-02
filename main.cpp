@@ -178,11 +178,11 @@ int wmain(int argc, wchar_t *argv[]) {
     if (cmd.HasArgument(L"boneRemap")) {
         auto boneRemapFilePath = cmd.GetArgumentPath(L"boneRemap");
         if (exists(boneRemapFilePath)) {
-            ifstream br(boneRemapFilePath);
-            for (string line; getline(br, line); ) {
-                auto bones = Split(line, '\t', true, true, true);
-                if (bones.size() == 2)
-                    rx3options.boneRemap[bones[0]] = bones[1];
+            TextFileTable br;
+            br.ReadUnicodeText(boneRemapFilePath);
+            for (auto const &r : br.Rows()) {
+                if (r.size() >= 2)
+                    rx3options.boneRemap[WtoA(r[0])] = WtoA(r[1]);
             }
         }
     }
