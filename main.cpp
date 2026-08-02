@@ -7,10 +7,14 @@
 #include "Rx3Hotspot.h"
 #include "Rx3Morph.h"
 #include "Rx3Skeleton.h"
+#include "MeshOperations/MeshSkinning.h"
 #include "TextFileTable.h"
 #include <shobjidl.h>
 #include "nlohmann/json.hpp"
 #include "ProgressBar.h"
+#include <fstream>
+
+#define RX3C_VERSION "0.200"
 
 using namespace rx3utils;
 
@@ -44,10 +48,11 @@ int wmain(int argc, wchar_t *argv[]) {
         return 0;
     CommandLine cmd(argc, argv,
         // arguments
-        { L"i", L"o", L"game", L"skeleton", L"model", L"texture", L"folderOption", L"texFormatFile", L"baseModel" },
+        { L"i", L"o", L"game", L"skeleton", L"model", L"texture", L"folderOption", L"texFormatFile", L"baseModel",
+          L"boneMatrices", L"boneRemap", L"scale", L"move", L"poseFrom", L"poseTo" },
         // options
         { L"export", L"import", L"recursive", L"silent", L"console", L"exportQuads", L"writeHDR", L"writeTexMetadata",
-          L"noMetadata" }
+          L"noMetadata", L"binormals", L"tristrip" }
     );
     if (cmd.HasOption(L"silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
@@ -124,6 +129,8 @@ int wmain(int argc, wchar_t *argv[]) {
     }
 
     Rx3Options rx3options;
+    rx3options.tools = "RX3 Converter (rx3c), part of Rx3Tools";
+    rx3options.toolsVersion = RX3C_VERSION;
     rx3options.cmdLine = ToUTF8(GetCommandLineW());
 
     if (cmd.HasArgument(L"game"))
@@ -154,7 +161,40 @@ int wmain(int argc, wchar_t *argv[]) {
         ReadTexFormatFile(cmd.GetArgumentPath(L"texFormatFile"), rx3options.texTargetFormats, order);
     }
     rx3options.metadata = !cmd.HasOption(L"noMetadata");
-    rx3options.boneMatricesOption = eBoneMatricesOption::BONE_MATRICES_FROM_BASE_MODEL;
+    rx3options.binormals = cmd.HasOption(L"binormals");
+    rx3options.tristrip = cmd.HasOption(L"tristrip");
+    rx3options.boneMatricesOption = (eBoneMatricesOption)cmd.GetArgumentInt(L"boneMatrices");
+    if (cmd.HasArgument(L"scale"))
+        rx3options.scale = cmd.GetArgumentFloat(L"scale");
+    if (cmd.HasArgument(L"move")) {
+        auto moveLine = cmd.GetArgumentString(L"move");
+        auto moveParts = Split(moveLine, ',');
+        if (moveParts.size() == 3) {
+            rx3options.movement.x = SafeConvertFloat(moveParts[0]);
+            rx3options.movement.y = SafeConvertFloat(moveParts[1]);
+            rx3options.movement.z = SafeConvertFloat(moveParts[2]);
+        }
+    }
+    if (cmd.HasArgument(L"boneRemap")) {
+        auto boneRemapFilePath = cmd.GetArgumentPath(L"boneRemap");
+        if (exists(boneRemapFilePath)) {
+            ifstream br(boneRemapFilePath);
+            for (string line; getline(br, line); ) {
+                auto bones = Split(line, '\t', true, true, true);
+                if (bones.size() == 2)
+                    rx3options.boneRemap[bones[0]] = bones[1];
+            }
+        }
+    }
+    if (cmd.HasArgument(L"poseFrom") && cmd.HasArgument(L"poseTo")) {
+        auto poseFrom = cmd.GetArgumentPath(L"poseFrom");
+        auto poseTo = cmd.GetArgumentPath(L"poseTo");
+        if (exists(poseFrom) && exists(poseTo)) {
+            auto poseFromSkel = ReadModelFromFile(poseFrom).skeleton;
+            auto poseToSkel = ReadModelFromFile(poseTo).skeleton;
+            rx3options.poseChangeMatrices = MeshSkinning::ComputeBoneDiffMatrices(poseFromSkel, poseToSkel);
+        }
+    }
 
     if (cmd.HasArgument(L"skeleton")) {
         path skeletonPath = cmd.GetArgumentPath(L"skeleton");
