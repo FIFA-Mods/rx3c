@@ -7,7 +7,7 @@
 #include "Rx3Hotspot.h"
 #include "Rx3Morph.h"
 #include "Rx3Skeleton.h"
-#include "MeshOperations/MeshSkinning.h"
+#include "ModelOperations/ModelSkinning.h"
 #include "TextFileTable.h"
 #include <shobjidl.h>
 #include "nlohmann/json.hpp"
@@ -147,9 +147,9 @@ int wmain(int argc, wchar_t *argv[]) {
         rx3options.textureFormat = ToLower(WtoA(cmd.GetArgumentString(L"texture")));
     if (cmd.HasArgument(L"folderOption")) {
         auto strFolderOption = ToLower(cmd.GetArgumentString(L"folderOption"));
-        if (strFolderOption == L"alwaysCreate")
+        if (strFolderOption == L"alwayscreate")
             rx3options.folderOption = FOLDER_OPTION_ALWAYS_CREATE;
-        else if (strFolderOption == L"neverCreate")
+        else if (strFolderOption == L"nevercreate")
             rx3options.folderOption = FOLDER_OPTION_NEVER_CREATE;
     }
     
@@ -163,7 +163,17 @@ int wmain(int argc, wchar_t *argv[]) {
     rx3options.metadata = !cmd.HasOption(L"noMetadata");
     rx3options.binormals = cmd.HasOption(L"binormals");
     rx3options.tristrip = cmd.HasOption(L"tristrip");
-    rx3options.boneMatricesOption = (eBoneMatricesOption)cmd.GetArgumentInt(L"boneMatrices");
+    if (cmd.HasArgument(L"boneMatrices")) {
+        auto strBoneMatrices = ToLower(cmd.GetArgumentString(L"boneMatrices"));
+        if (strBoneMatrices == L"fromsourcerx3")
+            rx3options.boneMatricesOption = BONE_MATRICES_FROM_SOURCE_RX3;
+        else if (strBoneMatrices == L"fromskeleton")
+            rx3options.boneMatricesOption = BONE_MATRICES_FROM_SKELETON;
+        else if (strBoneMatrices == L"frombasemodel")
+            rx3options.boneMatricesOption = BONE_MATRICES_FROM_BASE_MODEL;
+        else
+            rx3options.boneMatricesOption = BONE_MATRICES_FROM_FBX_FILE;
+    }
     if (cmd.HasArgument(L"scale"))
         rx3options.scale = cmd.GetArgumentFloat(L"scale");
     if (cmd.HasArgument(L"move")) {
@@ -192,7 +202,7 @@ int wmain(int argc, wchar_t *argv[]) {
         if (exists(poseFrom) && exists(poseTo)) {
             auto poseFromSkel = ReadModelFromFile(poseFrom).skeleton;
             auto poseToSkel = ReadModelFromFile(poseTo).skeleton;
-            rx3options.poseChangeMatrices = MeshSkinning::ComputeBoneDiffMatrices(poseFromSkel, poseToSkel);
+            rx3options.poseChangeMatrices = ModelSkinning::ComputeBoneDiffMatrices(poseFromSkel, poseToSkel);
         }
     }
 
